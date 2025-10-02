@@ -662,3 +662,4 @@ docker-compose down -v      # Reset
 **Ready to manage your lodgers professionally!** 🎉
 
 For questions or issues, check the documentation or troubleshooting section above.# lodger-manager
+# lodger-manger
