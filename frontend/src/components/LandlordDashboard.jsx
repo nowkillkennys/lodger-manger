@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, CreditCard, Calendar, Settings, LogOut, Bell, Plus, Eye, FileText, TrendingUp, Clock, AlertCircle } from 'lucide-react';
+import { Home, Users, CreditCard, Calendar, Settings, LogOut, Bell, Plus, Eye, FileText, TrendingUp, Clock, AlertCircle, Download } from 'lucide-react';
 import axios from 'axios';
 import StatCard from './StatCard';
 import { API_URL } from '../config';
@@ -16,6 +16,21 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
     full_name: '',
     phone: ''
   });
+  const [showCreateTenancy, setShowCreateTenancy] = useState(false);
+  const [newTenancy, setNewTenancy] = useState({
+    lodger_id: '',
+    property_address: user.address || '',
+    room_description: '',
+    start_date: '',
+    initial_term_months: 6,
+    monthly_rent: '',
+    initial_payment: '',
+    deposit_applicable: false,
+    deposit_amount: '',
+    shared_areas: ''
+  });
+  const [selectedTenancy, setSelectedTenancy] = useState(null);
+  const [showTenancyModal, setShowTenancyModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [stats, setStats] = useState({
     activeTenancies: 0,
@@ -93,6 +108,50 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
       fetchDashboardData();
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to create lodger');
+    }
+  };
+
+  const handleCreateTenancy = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+
+      // Prepare tenancy data
+      const tenancyData = {
+        lodger_id: newTenancy.lodger_id,
+        property_address: newTenancy.property_address,
+        room_description: newTenancy.room_description,
+        start_date: newTenancy.start_date,
+        initial_term_months: parseInt(newTenancy.initial_term_months),
+        monthly_rent: parseFloat(newTenancy.monthly_rent),
+        initial_payment: parseFloat(newTenancy.initial_payment),
+        deposit_applicable: newTenancy.deposit_applicable,
+        deposit_amount: newTenancy.deposit_applicable ? parseFloat(newTenancy.deposit_amount) : 0,
+        shared_areas: newTenancy.shared_areas
+      };
+
+      await axios.post(`${API_URL}/api/tenancies`, tenancyData, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Reset form and refresh data
+      setNewTenancy({
+        lodger_id: '',
+        property_address: user.address || '',
+        room_description: '',
+        start_date: '',
+        initial_term_months: 6,
+        monthly_rent: '',
+        initial_payment: '',
+        deposit_applicable: false,
+        deposit_amount: '',
+        shared_areas: ''
+      });
+      setShowCreateTenancy(false);
+      fetchDashboardData();
+      alert('Tenancy created successfully!');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to create tenancy');
     }
   };
 
@@ -411,15 +470,218 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
         {activeTab === 'tenancies' && (
           <div className="space-y-6">
             <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-bold">Tenancies</h2>
-              <button 
-                onClick={onNewTenancy} 
-                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition shadow-lg"
+              <div>
+                <h2 className="text-2xl font-bold">Tenancies</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Active tenancies: {tenancies.filter(t => t.status === 'active' || t.status === 'draft').length} / 2 (Maximum)
+                </p>
+              </div>
+              <button
+                onClick={() => setShowCreateTenancy(true)}
+                disabled={tenancies.filter(t => t.status === 'active' || t.status === 'draft').length >= 2 || lodgers.length === 0}
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-lg ${
+                  tenancies.filter(t => t.status === 'active' || t.status === 'draft').length >= 2 || lodgers.length === 0
+                    ? 'bg-gray-400 cursor-not-allowed'
+                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                }`}
               >
                 <Plus className="w-5 h-5" />
                 New Tenancy
               </button>
             </div>
+
+            {tenancies.filter(t => t.status === 'active' || t.status === 'draft').length >= 2 && (
+              <div className="bg-orange-50 border border-orange-200 text-orange-700 px-4 py-3 rounded-lg text-sm">
+                <strong>Limit Reached:</strong> You have reached the maximum of 2 active tenancies.
+              </div>
+            )}
+
+            {lodgers.length === 0 && (
+              <div className="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg text-sm">
+                <strong>No Lodgers:</strong> Create lodger accounts first before creating tenancies. Go to the Lodgers tab.
+              </div>
+            )}
+
+            {/* Create Tenancy Form */}
+            {showCreateTenancy && (
+              <div className="bg-white rounded-lg shadow p-6">
+                <h3 className="text-lg font-semibold mb-4">Create New Tenancy</h3>
+                <form onSubmit={handleCreateTenancy} className="space-y-4">
+                  {/* Lodger Selection */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Select Lodger *</label>
+                    <select
+                      required
+                      value={newTenancy.lodger_id}
+                      onChange={(e) => setNewTenancy({...newTenancy, lodger_id: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="">Choose a lodger...</option>
+                      {lodgers.map((lodger) => (
+                        <option key={lodger.id} value={lodger.id}>
+                          {lodger.full_name} ({lodger.email})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Property Details */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Property Address *</label>
+                    <textarea
+                      required
+                      value={newTenancy.property_address}
+                      onChange={(e) => setNewTenancy({...newTenancy, property_address: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-gray-50"
+                      placeholder={user.address || "123 Main Street, London, SW1A 1AA"}
+                      rows={3}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Auto-filled from your profile</p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Room Description *</label>
+                      <input
+                        type="text"
+                        required
+                        value={newTenancy.room_description}
+                        onChange={(e) => setNewTenancy({...newTenancy, room_description: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="e.g., Double room with ensuite"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Shared Areas</label>
+                      <input
+                        type="text"
+                        value={newTenancy.shared_areas}
+                        onChange={(e) => setNewTenancy({...newTenancy, shared_areas: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="e.g., Kitchen, living room, bathroom"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Financial Details */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Start Date *</label>
+                      <input
+                        type="date"
+                        required
+                        value={newTenancy.start_date}
+                        onChange={(e) => setNewTenancy({...newTenancy, start_date: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Initial Term *</label>
+                      <select
+                        required
+                        value={newTenancy.initial_term_months}
+                        onChange={(e) => setNewTenancy({...newTenancy, initial_term_months: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      >
+                        <option value={3}>3 months</option>
+                        <option value={6}>6 months</option>
+                        <option value={12}>12 months</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Monthly Rent (£) *</label>
+                      <input
+                        type="number"
+                        required
+                        step="0.01"
+                        min="0"
+                        value={newTenancy.monthly_rent}
+                        onChange={(e) => {
+                          const rent = e.target.value;
+                          setNewTenancy({
+                            ...newTenancy,
+                            monthly_rent: rent,
+                            initial_payment: rent ? (parseFloat(rent) * 2).toFixed(2) : ''
+                          });
+                        }}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="800.00"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Initial Payment (£) *</label>
+                      <input
+                        type="number"
+                        required
+                        step="0.01"
+                        min="0"
+                        value={newTenancy.initial_payment}
+                        onChange={(e) => setNewTenancy({...newTenancy, initial_payment: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-gray-50"
+                        placeholder="Auto-calculated as 2x monthly rent"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Typically 2x monthly rent</p>
+                    </div>
+                    <div>
+                      <label className="flex items-center gap-2 text-sm font-medium text-gray-700 mb-2">
+                        <input
+                          type="checkbox"
+                          checked={newTenancy.deposit_applicable}
+                          onChange={(e) => setNewTenancy({...newTenancy, deposit_applicable: e.target.checked})}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        Deposit Applicable
+                      </label>
+                      {newTenancy.deposit_applicable && (
+                        <input
+                          type="number"
+                          required
+                          step="0.01"
+                          min="0"
+                          value={newTenancy.deposit_amount}
+                          onChange={(e) => setNewTenancy({...newTenancy, deposit_amount: e.target.value})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                          placeholder="Deposit amount"
+                        />
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t">
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                    >
+                      Create Tenancy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowCreateTenancy(false);
+                        setNewTenancy({
+                          lodger_id: '',
+                          property_address: user.address || '',
+                          room_description: '',
+                          start_date: '',
+                          initial_term_months: 6,
+                          monthly_rent: '',
+                          initial_payment: '',
+                          deposit_applicable: false,
+                          deposit_amount: '',
+                          shared_areas: ''
+                        });
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
 
             {tenancies.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -427,34 +689,46 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                   <div key={tenancy.id} className="bg-white rounded-lg shadow p-6 hover:shadow-lg transition">
                     <div className="flex items-start justify-between mb-4">
                       <div>
-                        <h3 className="text-lg font-semibold">{tenancy.lodgerFullName || tenancy.lodgerName}</h3>
-                        <p className="text-sm text-gray-600">{tenancy.address}</p>
+                        <h3 className="text-lg font-semibold">{tenancy.lodger_name}</h3>
+                        <p className="text-sm text-gray-600">{tenancy.address || tenancy.property_address}</p>
                       </div>
                       <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-medium">
                         {tenancy.status || 'active'}
                       </span>
                     </div>
-                    
+
                     <div className="space-y-2 mb-4">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Start Date:</span>
-                        <span className="font-medium">{tenancy.startDate}</span>
+                        <span className="font-medium">{tenancy.start_date ? new Date(tenancy.start_date).toLocaleDateString() : 'N/A'}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-600">Monthly Rent:</span>
-                        <span className="font-medium">£{tenancy.monthlyRent}</span>
+                        <span className="font-medium">£{tenancy.monthly_rent}</span>
                       </div>
                     </div>
                     
                     <div className="flex gap-2">
-                      <button className="flex-1 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 text-sm">
+                      <button
+                        onClick={() => {
+                          setSelectedTenancy(tenancy);
+                          setShowTenancyModal(true);
+                        }}
+                        className="flex-1 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 text-sm"
+                      >
                         <Eye className="w-4 h-4" />
                         View
                       </button>
-                      <button className="flex-1 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 text-sm">
-                        <FileText className="w-4 h-4" />
-                        Agreement
-                      </button>
+                      {tenancy.lodger_signature && (
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium flex items-center gap-1">
+                          ✓ Signed
+                        </span>
+                      )}
+                      {!tenancy.lodger_signature && (
+                        <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                          Pending
+                        </span>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -545,6 +819,200 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
           </div>
         )}
       </div>
+
+      {/* Tenancy Details Modal */}
+      {showTenancyModal && selectedTenancy && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Tenancy Agreement Details</h2>
+                <p className="text-sm text-gray-600 mt-1">{selectedTenancy.lodger_name}</p>
+              </div>
+              <button
+                onClick={() => setShowTenancyModal(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Status Banner */}
+              {selectedTenancy.lodger_signature ? (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">
+                      ✓
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-green-900">Agreement Signed</h3>
+                      <p className="text-sm text-green-700">
+                        Signed on {selectedTenancy.signature_date ? new Date(selectedTenancy.signature_date).toLocaleString() : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-orange-500 rounded-full flex items-center justify-center text-white font-bold">
+                      !
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-orange-900">Awaiting Lodger Signature</h3>
+                      <p className="text-sm text-orange-700">
+                        The lodger needs to review and accept the agreement
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Agreement Details */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4">Agreement Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Property Address</p>
+                    <p className="font-medium">{selectedTenancy.address || selectedTenancy.property_address}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Room Description</p>
+                    <p className="font-medium">{selectedTenancy.room_description || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Shared Areas</p>
+                    <p className="font-medium">{selectedTenancy.shared_areas || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Start Date</p>
+                    <p className="font-medium">{selectedTenancy.start_date ? new Date(selectedTenancy.start_date).toLocaleDateString() : 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Initial Term</p>
+                    <p className="font-medium">{selectedTenancy.initial_term_months} months</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Monthly Rent</p>
+                    <p className="font-medium">£{selectedTenancy.monthly_rent}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Initial Payment</p>
+                    <p className="font-medium">£{selectedTenancy.initial_payment}</p>
+                  </div>
+                  {selectedTenancy.deposit_applicable && (
+                    <div>
+                      <p className="text-sm text-gray-600">Deposit</p>
+                      <p className="font-medium">£{selectedTenancy.deposit_amount}</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-sm text-gray-600">Status</p>
+                    <p className="font-medium capitalize">{selectedTenancy.status}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Photo ID Section */}
+              {selectedTenancy.lodger_signature && (
+                <div className="bg-white border-2 border-gray-300 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold mb-4">Right to Rent Verification</h3>
+                  {selectedTenancy.photo_id_path ? (
+                    <div>
+                      <p className="text-sm text-gray-600 mb-3">Photo ID uploaded by lodger:</p>
+                      <div className="border-2 border-gray-300 rounded-lg p-4 bg-gray-50 flex items-center justify-center min-h-[400px]">
+                        <img
+                          src={`${API_URL}${selectedTenancy.photo_id_path}`}
+                          alt="Lodger Photo ID"
+                          className="max-w-full max-h-[600px] w-auto h-auto object-contain rounded shadow-lg"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2 text-center">
+                        Right to Rent verification document - Please verify authenticity
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-gray-500">No photo ID uploaded</p>
+                  )}
+                </div>
+              )}
+
+              {/* Signature Information */}
+              {selectedTenancy.lodger_signature && (
+                <div className="bg-white border-2 border-gray-300 rounded-lg p-6">
+                  <h3 className="text-lg font-semibold mb-4">Signature Details</h3>
+                  <div className="space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-600">Lodger Signature</p>
+                      <p className="font-medium text-lg italic">{selectedTenancy.lodger_signature}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Date Signed</p>
+                      <p className="font-medium">
+                        {selectedTenancy.signature_date ? new Date(selectedTenancy.signature_date).toLocaleString() : 'N/A'}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t">
+                {selectedTenancy.lodger_signature && !selectedTenancy.signed_agreement_path && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        const token = localStorage.getItem('token');
+                        await axios.post(
+                          `${API_URL}/api/tenancies/${selectedTenancy.id}/approve`,
+                          {},
+                          { headers: { Authorization: `Bearer ${token}` }}
+                        );
+                        alert('Agreement approved and PDF generated successfully!');
+                        setShowTenancyModal(false);
+                        fetchDashboardData();
+                      } catch (error) {
+                        alert(error.response?.data?.error || 'Failed to approve agreement');
+                      }
+                    }}
+                    className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                  >
+                    Approve & Generate Agreement PDF
+                  </button>
+                )}
+                {selectedTenancy.signed_agreement_path && (
+                  <>
+                    <a
+                      href={`${API_URL}${selectedTenancy.signed_agreement_path}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold inline-flex items-center gap-2"
+                    >
+                      <Eye className="w-4 h-4" />
+                      View Agreement PDF
+                    </a>
+                    <a
+                      href={`${API_URL}${selectedTenancy.signed_agreement_path}`}
+                      download
+                      className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold inline-flex items-center gap-2"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download PDF
+                    </a>
+                  </>
+                )}
+                <button
+                  onClick={() => setShowTenancyModal(false)}
+                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

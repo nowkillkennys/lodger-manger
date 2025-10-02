@@ -178,7 +178,7 @@ app.post('/api/auth/login', async (req, res) => {
 // Register new user
 app.post('/api/auth/register', async (req, res) => {
     try {
-        const { email, password, user_type, full_name, phone } = req.body;
+        const { email, password, user_type, full_name, phone, address } = req.body;
 
         // Validate required fields
         if (!email || !password || !user_type || !full_name) {
@@ -205,10 +205,10 @@ app.post('/api/auth/register', async (req, res) => {
 
         // Create user
         const result = await pool.query(
-            `INSERT INTO users (email, password_hash, user_type, full_name, phone)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING id, email, user_type, full_name, phone`,
-            [email, passwordHash, user_type, full_name, phone || null]
+            `INSERT INTO users (email, password_hash, user_type, full_name, phone, address)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id, email, user_type, full_name, phone, address`,
+            [email, passwordHash, user_type, full_name, phone || null, address || null]
         );
 
         const user = result.rows[0];
@@ -306,10 +306,10 @@ app.post('/api/users', authenticateToken, requireRole('landlord', 'admin'), asyn
         const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
 
         const result = await pool.query(
-            `INSERT INTO users (email, password_hash, user_type, full_name, phone)
-             VALUES ($1, $2, $3, $4, $5)
-             RETURNING id, email, user_type, full_name, phone`,
-            [email, password_hash, user_type, full_name, phone || null]
+            `INSERT INTO users (email, password_hash, user_type, full_name, phone, address)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING id, email, user_type, full_name, phone, address`,
+            [email, password_hash, user_type, full_name, phone || null, null]
         );
 
         res.status(201).json(result.rows[0]);
@@ -550,6 +550,232 @@ app.put('/api/tenancies/:id', authenticateToken, requireRole('landlord', 'admin'
     } catch (error) {
         console.error('Update tenancy error:', error);
         res.status(500).json({ error: 'Failed to update tenancy' });
+    }
+});
+
+// Accept tenancy agreement (lodger only)
+app.post('/api/tenancies/:id/accept', authenticateToken, upload.single('photo_id'), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Verify tenancy belongs to lodger
+        const tenancyCheck = await pool.query(
+            'SELECT * FROM tenancies WHERE id = $1 AND lodger_id = $2',
+            [id, req.user.id]
+        );
+
+        if (tenancyCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Tenancy not found' });
+        }
+
+        const photoIdPath = req.file ? `/uploads/${req.file.filename}` : null;
+
+        // Update tenancy with lodger signature and photo ID
+        const result = await pool.query(
+            `UPDATE tenancies
+             SET lodger_signature = $1,
+                 photo_id_path = $2,
+                 signature_date = CURRENT_TIMESTAMP,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $3 AND lodger_id = $4
+             RETURNING *`,
+            [req.user.full_name, photoIdPath, id, req.user.id]
+        );
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Accept tenancy error:', error);
+        res.status(500).json({ error: 'Failed to accept tenancy' });
+    }
+});
+
+// Approve tenancy and generate PDF (landlord only)
+app.post('/api/tenancies/:id/approve', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Verify tenancy belongs to landlord
+        const tenancyCheck = await pool.query(
+            'SELECT * FROM tenancies WHERE id = $1 AND landlord_id = $2',
+            [id, req.user.id]
+        );
+
+        if (tenancyCheck.rows.length === 0) {
+            return res.status(404).json({ error: 'Tenancy not found' });
+        }
+
+        const tenancy = tenancyCheck.rows[0];
+
+        // Check if lodger has signed
+        if (!tenancy.lodger_signature) {
+            return res.status(400).json({ error: 'Lodger has not signed the agreement yet' });
+        }
+
+        // Generate PDF path
+        const pdfFileName = `agreement_${id}_${Date.now()}.pdf`;
+        const pdfPath = `/uploads/agreements/${pdfFileName}`;
+
+        // Create directory if it doesn't exist
+        const uploadDir = path.join(__dirname, 'uploads', 'agreements');
+        await fs.mkdir(uploadDir, { recursive: true });
+
+        // For now, create a simple text file as placeholder for PDF generation
+        // TODO: Implement actual PDF generation with PDFKit
+        const PDFDocument = require('pdfkit');
+        const pdfDoc = new PDFDocument();
+        const pdfFilePath = path.join(uploadDir, pdfFileName);
+        const writeStream = require('fs').createWriteStream(pdfFilePath);
+
+        pdfDoc.pipe(writeStream);
+
+        // Add content to PDF
+        const margin = 50;
+        const pageWidth = pdfDoc.page.width - (margin * 2);
+
+        pdfDoc.fontSize(18).text('LODGER AGREEMENT', { align: 'center' });
+        pdfDoc.moveDown(0.5);
+        pdfDoc.fontSize(12).text('AGREEMENT FOR NON-EXCLUSIVE OR SHARED OCCUPATION', { align: 'center' });
+        pdfDoc.moveDown();
+
+        pdfDoc.fontSize(9).text('This LODGER AGREEMENT is made up of the details about the parties and the agreement in Part 1, the Terms and Conditions printed below in Part 2, whereby the Room is licensed by the Householder and taken by the Lodger during the Term upon making the Accommodation Payment.', { align: 'justify' });
+        pdfDoc.moveDown();
+
+        // PART 1 - PARTICULARS
+        pdfDoc.fontSize(12).text('PART 1 - PARTICULARS', { underline: true });
+        pdfDoc.moveDown(0.5);
+        pdfDoc.fontSize(9);
+        pdfDoc.text(`PROPERTY: ${tenancy.property_address}`);
+        pdfDoc.text(`ROOM: ${tenancy.room_description || 'Means the room or rooms in the Property which the Householder allocates to the Lodger'}`);
+        pdfDoc.text(`SHARED AREAS: ${tenancy.shared_areas || 'Entrance hall, staircase and landings, kitchen for cooking and storage, lavatory and bathroom, sitting room, garden'}`);
+        pdfDoc.text(`HOUSEHOLDER (Landlord): ${req.user.full_name}`);
+        pdfDoc.text(`LODGER: ${tenancy.lodger_signature}`);
+        pdfDoc.text(`START DATE: ${new Date(tenancy.start_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`);
+        pdfDoc.text(`TERM: ${tenancy.initial_term_months} Months Rolling Contract`);
+        pdfDoc.text(`INITIAL PAYMENT: £${tenancy.initial_payment} (current and month in advance)`);
+        pdfDoc.text(`ACCOMMODATION PAYMENT: £${tenancy.monthly_rent} per 28 days`);
+        pdfDoc.text(`DEPOSIT: £${tenancy.deposit_amount || 0} ${tenancy.deposit_applicable ? '(Applicable)' : '(Not Applicable)'}`);
+        pdfDoc.moveDown();
+
+        // EARLY TERMINATION & UTILITIES
+        pdfDoc.fontSize(10).text('EARLY TERMINATION:', { underline: true });
+        pdfDoc.fontSize(9).text('Either party may at any time end this Agreement by giving notice in writing of at least one calendar month ending on the Payment Day.');
+        pdfDoc.moveDown(0.5);
+
+        pdfDoc.fontSize(10).text('UTILITY COSTS:', { underline: true });
+        pdfDoc.fontSize(9).text('All utilities including gas, electric, water, basic internet, and Council Tax are INCLUDED. Television License is NOT included.');
+        pdfDoc.moveDown();
+
+        // Add new page for terms
+        pdfDoc.addPage();
+
+        pdfDoc.fontSize(11).text('NOW IT IS AGREED AS FOLLOWS:', { underline: true });
+        pdfDoc.moveDown();
+
+        // Section 1
+        pdfDoc.fontSize(10).text('1. About the Licence to Occupy a Room in the Property', { underline: true });
+        pdfDoc.fontSize(8);
+        pdfDoc.text('1.1. The Householder permits the Lodger to occupy the Room until either party ends the arrangement as provided for under clause 9.');
+        pdfDoc.text('1.2. The Lodger will occupy the Room personally and shall not share with any other person without written consent.');
+        pdfDoc.text('1.3. The Lodger shall have use of the Contents in the Room, an inventory of which will be prepared by the Householder.');
+        pdfDoc.text('1.4. The Lodger may use the Shared Areas in common with the Householder.');
+        pdfDoc.text('1.5. This agreement is NOT intended to confer exclusive possession upon the Lodger nor to create landlord/tenant relationship.');
+        pdfDoc.text('1.6. This agreement is personal to the Lodger and cannot be assigned to any other party.');
+        pdfDoc.text('1.7. The Lodger must maintain "Right to Rent" as defined by the Immigration Act 2014 at all times.');
+        pdfDoc.moveDown();
+
+        // Section 2
+        pdfDoc.fontSize(10).text('2. Lodger Obligations', { underline: true });
+        pdfDoc.fontSize(8);
+        pdfDoc.text('2.1. Payments: To pay the Accommodation Payment at the times specified. To pay 3% interest above Bank of England base rate for late payments (14+ days).');
+        pdfDoc.text('2.2. Utilities: To make only reasonable use of Utilities consistent with ordinary residential use.');
+        pdfDoc.text('2.3. Use: Not to use the Room other than as a private residence. Occasional overnight visitors allowed with prior permission.');
+        pdfDoc.text('2.4. Maintenance: Keep the Room and Shared Parts in good and clean condition. Make good any damage to Contents.');
+        pdfDoc.text('2.5. Activities: Not to smoke inside (outside only). Cook only in kitchen. No pets without consent. No alterations without consent. Not to cause nuisance. Clean Room weekly and dispose of rubbish daily.');
+        pdfDoc.text('2.6. Other: Comply with Right to Rent checks. Assist with Council Tax applications if applicable.');
+        pdfDoc.text('2.7. End of Agreement: Vacate and leave in clean condition (fair wear and tear excepted). Return all keys. Provide forwarding address.');
+        pdfDoc.moveDown();
+
+        // Section 3
+        pdfDoc.fontSize(10).text('3. Householder Obligations', { underline: true });
+        pdfDoc.fontSize(8);
+        pdfDoc.text('3.1. Keep in good repair structure, exterior, drains, gutters and installations for water, gas, electricity, sanitation, heating.');
+        pdfDoc.text('3.2. Keep in good repair fixtures and fittings provided for Lodger use.');
+        pdfDoc.text('3.3. Comply with Gas Safety Regulations 1998 - annual gas appliance checks by Gas Safe-registered installer.');
+        pdfDoc.text('3.4. Ensure furniture complies with Fire Safety Regulations 1988.');
+        pdfDoc.text('3.5. Ensure all electrical equipment is kept in good repair.');
+        pdfDoc.text('3.6. Install and maintain smoke detectors and carbon monoxide detectors.');
+        pdfDoc.text('3.7. Ensure Room and Shared Areas are fit for human habitation.');
+        pdfDoc.text('3.8. Pay the Council Tax for the Property during the Term.');
+        pdfDoc.moveDown();
+
+        // Sections 4-8
+        pdfDoc.fontSize(10).text('4. Amicable Sharing', { underline: true });
+        pdfDoc.fontSize(8).text('The Lodger shall use best efforts to share the Room and Property amicably. Both parties will respect privacy and decency. Nothing grants exclusive possession.');
+        pdfDoc.moveDown(0.5);
+
+        pdfDoc.fontSize(10).text('5. Keys', { underline: true });
+        pdfDoc.fontSize(8).text('The Householder shall give the Lodger one set of keys. The Lodger will keep safe any keys. The Householder retains their own keys and may obtain free entry at any reasonable time.');
+        pdfDoc.moveDown(0.5);
+
+        pdfDoc.fontSize(10).text('6. Deposit', { underline: true });
+        pdfDoc.fontSize(8).text('The Deposit will be held by the Householder during the Term. No interest payable. NOT required to be protected. At end of Term will be refunded less any reasonable deductions. Repaid within one month except exceptional circumstances.');
+        pdfDoc.moveDown(0.5);
+
+        pdfDoc.fontSize(10).text('7. Uninhabitability', { underline: true });
+        pdfDoc.fontSize(8).text('If destruction or damage makes Property uninhabitable, Lodger relieved from making Payment proportionate to extent prevented from living in Property (unless caused by Lodger).');
+        pdfDoc.moveDown(0.5);
+
+        pdfDoc.fontSize(10).text('8. Moving to Another Room', { underline: true });
+        pdfDoc.fontSize(8).text('The Householder may give written notice directing Lodger to use another room of similar size and condition. Minimum 48 hours notice.');
+        pdfDoc.moveDown();
+
+        // Section 9 - Ending Agreement
+        pdfDoc.fontSize(10).text('9. Ending this Agreement', { underline: true });
+        pdfDoc.fontSize(8);
+        pdfDoc.text('9.1. Termination for Breach: If Lodger breaches any term, or payments 14+ days late, or declared bankrupt, Householder may give 7 days notice to remedy. If not remedied after 7 days, landlord may terminate with further 14 days notice.');
+        pdfDoc.text('9.2. Break Clause: Either party may terminate by giving one calendar month written notice expiring day before a Payment Day.');
+        pdfDoc.text('9.3. Behaviour Clause: If behaviour unacceptable, Householder will provide written warning. If not corrected, may terminate with maximum 14 days notice (immediate for aggressive behaviour).');
+        pdfDoc.text('9.4. At end, Lodger must remove all items. Items left behind (except perishable food) stored for 14 days then disposed of.');
+        pdfDoc.moveDown();
+
+        // Section 10
+        pdfDoc.fontSize(10).text('10. About the Legal Effect of this Agreement', { underline: true });
+        pdfDoc.fontSize(8).text('If any term is illegal or unenforceable, that term shall be deemed not to form part and remainder not affected. This agreement governed by laws of England and Wales. Embodies entire understanding between parties.');
+        pdfDoc.moveDown(2);
+
+        // SIGNATURES
+        pdfDoc.fontSize(12).text('SIGNATURES', { underline: true });
+        pdfDoc.moveDown();
+        pdfDoc.fontSize(10);
+        pdfDoc.text(`Signed by the Lodger: ${tenancy.lodger_signature}`);
+        pdfDoc.text(`Date: ${new Date(tenancy.signature_date).toLocaleString('en-GB')}`);
+        pdfDoc.moveDown();
+        pdfDoc.text(`Signed by the Householder: ${req.user.full_name}`);
+        pdfDoc.text(`Date: ${new Date().toLocaleString('en-GB')}`);
+
+        pdfDoc.end();
+
+        // Wait for PDF to be written
+        await new Promise((resolve, reject) => {
+            writeStream.on('finish', resolve);
+            writeStream.on('error', reject);
+        });
+
+        // Update tenancy with landlord signature and PDF path
+        const result = await pool.query(
+            `UPDATE tenancies
+             SET landlord_signature = $1,
+                 signed_agreement_path = $2,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $3
+             RETURNING *`,
+            [req.user.full_name, pdfPath, id]
+        );
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Approve tenancy error:', error);
+        res.status(500).json({ error: 'Failed to approve tenancy' });
     }
 });
 

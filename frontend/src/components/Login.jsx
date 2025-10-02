@@ -10,6 +10,7 @@ const Login = ({ onLoginSuccess }) => {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -26,7 +27,8 @@ const Login = ({ onLoginSuccess }) => {
           password,
           user_type: userType,
           full_name: fullName,
-          phone
+          phone,
+          address: userType === 'landlord' ? address : undefined
         });
 
         // Store token and user
@@ -114,6 +116,19 @@ const Login = ({ onLoginSuccess }) => {
                   placeholder="John Doe"
                 />
               </div>
+              {userType === 'landlord' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Property Address</label>
+                  <textarea
+                    value={address}
+                    onChange={(e) => setAddress(e.target.value)}
+                    required
+                    rows={3}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                    placeholder="123 Main Street, London, SW1A 1AA"
+                  />
+                </div>
+              )}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Phone (optional)</label>
                 <input

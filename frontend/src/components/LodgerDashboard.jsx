@@ -10,6 +10,11 @@ const LodgerDashboard = ({ user, onLogout }) => {
   const [balance, setBalance] = useState(0);
   const [nextPayment, setNextPayment] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showAgreementModal, setShowAgreementModal] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [photoIdFile, setPhotoIdFile] = useState(null);
+  const [photoIdPreview, setPhotoIdPreview] = useState(null);
+  const [uploadingAgreement, setUploadingAgreement] = useState(false);
 
   useEffect(() => {
     fetchLodgerData();
@@ -21,13 +26,21 @@ const LodgerDashboard = ({ user, onLogout }) => {
       const config = { headers: { Authorization: `Bearer ${token}` } };
 
       const responses = await Promise.allSettled([
-        axios.get(`${API_URL}/api/tenancies/my-tenancy`, config),
+        axios.get(`${API_URL}/api/tenancies`, config),
         axios.get(`${API_URL}/api/payments/my-payments`, config),
         axios.get(`${API_URL}/api/dashboard/lodger`, config)
       ]);
 
       if (responses[0].status === 'fulfilled') {
-        setTenancy(responses[0].value.data);
+        const tenancies = responses[0].value.data;
+        // Lodgers should only have one active tenancy
+        const currentTenancy = tenancies.length > 0 ? tenancies[0] : null;
+        setTenancy(currentTenancy);
+
+        // Show agreement modal if tenancy exists but not signed
+        if (currentTenancy && !currentTenancy.lodger_signature) {
+          setShowAgreementModal(true);
+        }
       }
 
       if (responses[1].status === 'fulfilled') {
@@ -47,12 +60,129 @@ const LodgerDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const handlePhotoIdChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setPhotoIdFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPhotoIdPreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleAcceptAgreement = async () => {
+    if (!agreedToTerms) {
+      alert('Please agree to the terms and conditions');
+      return;
+    }
+
+    if (!photoIdFile) {
+      alert('Please upload your photo ID');
+      return;
+    }
+
+    setUploadingAgreement(true);
+
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('photo_id', photoIdFile);
+      formData.append('agreed', 'true');
+
+      await axios.post(`${API_URL}/api/tenancies/${tenancy.id}/accept`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      setShowAgreementModal(false);
+      fetchLodgerData();
+      alert('Agreement accepted successfully!');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to accept agreement');
+    } finally {
+      setUploadingAgreement(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-600">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show onboarding message if no tenancy exists
+  if (!tenancy) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        {/* Navigation Bar */}
+        <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-indigo-600 rounded-lg flex items-center justify-center">
+                <Home className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-gray-900">Lodger Manager</h1>
+                <p className="text-xs text-gray-500">Tenant Portal</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-lg">
+                <div className="text-right">
+                  <p className="text-sm font-semibold text-gray-900">{user.fullName}</p>
+                  <p className="text-xs text-gray-500">Lodger</p>
+                </div>
+                <button
+                  onClick={onLogout}
+                  className="p-2 text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                  title="Logout"
+                >
+                  <LogOut className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        </nav>
+
+        <div className="max-w-4xl mx-auto px-4 py-16">
+          <div className="bg-white rounded-lg shadow-lg p-12 text-center">
+            <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <Home className="w-10 h-10 text-indigo-600" />
+            </div>
+            <h2 className="text-3xl font-bold text-gray-900 mb-4">Welcome to Lodger Manager!</h2>
+            <p className="text-lg text-gray-600 mb-6">
+              Your landlord account has been created successfully.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-left max-w-2xl mx-auto">
+              <h3 className="font-semibold text-blue-900 mb-3">Next Steps:</h3>
+              <ol className="space-y-2 text-blue-800">
+                <li className="flex items-start gap-2">
+                  <span className="font-bold">1.</span>
+                  <span>Your landlord will create a tenancy agreement for you</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold">2.</span>
+                  <span>You'll receive access to view your tenancy details, payment schedule, and agreement</span>
+                </li>
+                <li className="flex items-start gap-2">
+                  <span className="font-bold">3.</span>
+                  <span>You'll be able to submit payments and manage your tenancy</span>
+                </li>
+              </ol>
+            </div>
+            <p className="text-sm text-gray-500 mt-8">
+              Please contact your landlord if you have any questions.
+            </p>
+          </div>
         </div>
       </div>
     );
@@ -164,7 +294,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
                 </div>
                 <p className="text-sm text-gray-600 mb-1">Monthly Rent</p>
                 <p className="text-2xl font-bold">
-                  £{tenancy?.monthlyRent || 0}
+                  £{tenancy?.monthly_rent || 0}
                 </p>
                 <p className="text-xs text-gray-500 mt-1">Every 28 days</p>
               </div>
@@ -308,10 +438,38 @@ const LodgerDashboard = ({ user, onLogout }) => {
                     Reference: {tenancy.agreementReference || 'N/A'}
                   </p>
                 </div>
-                <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
-                  <Download className="w-4 h-4" />
-                  Download PDF
-                </button>
+<div className="flex gap-2">
+                  {tenancy.signed_agreement_path ? (
+                    <>
+                      <a
+                        href={`${API_URL}${tenancy.signed_agreement_path}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                      >
+                        <Eye className="w-4 h-4" />
+                        View Agreement PDF
+                      </a>
+                      <a
+                        href={`${API_URL}${tenancy.signed_agreement_path}`}
+                        download
+                        className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download PDF
+                      </a>
+                    </>
+                  ) : (
+                    <button
+                      className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed"
+                      disabled
+                      title="Waiting for landlord approval"
+                    >
+                      <Download className="w-4 h-4" />
+                      PDF Pending Approval
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Agreement Details */}
@@ -322,17 +480,17 @@ const LodgerDashboard = ({ user, onLogout }) => {
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Start Date:</span>
-                  <span className="text-sm font-medium text-gray-900">{tenancy.startDate}</span>
+                  <span className="text-sm font-medium text-gray-900">{new Date(tenancy.start_date).toLocaleDateString()}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Term:</span>
                   <span className="text-sm font-medium text-gray-900">
-                    {tenancy.termMonths || 6} months rolling contract
+                    {tenancy.initial_term_months || 6} months rolling contract
                   </span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Monthly Rent:</span>
-                  <span className="text-sm font-medium text-gray-900">£{tenancy.monthlyRent}</span>
+                  <span className="text-sm font-medium text-gray-900">£{tenancy.monthly_rent}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Payment Cycle:</span>
@@ -340,7 +498,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Deposit:</span>
-                  <span className="text-sm font-medium text-gray-900">£{tenancy.depositAmount || 0}</span>
+                  <span className="text-sm font-medium text-gray-900">£{tenancy.deposit_amount || 0}</span>
                 </div>
                 <div className="flex justify-between py-2">
                   <span className="text-sm text-gray-600">Status:</span>
@@ -395,6 +553,290 @@ const LodgerDashboard = ({ user, onLogout }) => {
           </div>
         )}
       </div>
+
+      {/* Agreement Acceptance Modal */}
+      {showAgreementModal && tenancy && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="sticky top-0 bg-white border-b px-6 py-4">
+              <h2 className="text-2xl font-bold text-gray-900">Review & Accept Tenancy Agreement</h2>
+              <p className="text-sm text-gray-600 mt-1">Please review your agreement and upload photo ID</p>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Agreement Details */}
+              <div className="bg-gray-50 rounded-lg p-6">
+                <h3 className="text-lg font-semibold mb-4">Agreement Summary</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-600">Property Address</p>
+                    <p className="font-medium">{tenancy.address}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Room Description</p>
+                    <p className="font-medium">{tenancy.room_description || 'N/A'}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Start Date</p>
+                    <p className="font-medium">{new Date(tenancy.start_date).toLocaleDateString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Initial Term</p>
+                    <p className="font-medium">{tenancy.initial_term_months} months</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Monthly Rent</p>
+                    <p className="font-medium">£{tenancy.monthly_rent}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Initial Payment</p>
+                    <p className="font-medium">£{tenancy.initial_payment}</p>
+                  </div>
+                  {tenancy.deposit_applicable && (
+                    <div>
+                      <p className="text-sm text-gray-600">Deposit</p>
+                      <p className="font-medium">£{tenancy.deposit_amount}</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Full Agreement Text */}
+              <div className="bg-white border-2 border-gray-300 rounded-lg p-6 max-h-[500px] overflow-y-auto">
+                <h3 className="font-bold text-lg mb-4 sticky top-0 bg-white pb-2 border-b">LODGER AGREEMENT - FULL TERMS</h3>
+<div className="prose prose-sm max-w-none text-[11px] leading-relaxed space-y-3">
+                  <p className="font-bold text-center text-sm">LODGER AGREEMENT</p>
+                  <p className="font-semibold text-center">AGREEMENT FOR NON-EXCLUSIVE OR SHARED OCCUPATION</p>
+
+                  <p className="text-gray-700">
+                    This LODGER AGREEMENT is made up of the details about the parties and the agreement in Part 1,
+                    the Terms and Conditions printed below in Part 2, and any Special Terms and Conditions agreed
+                    between the parties which have been recorded in Part 3, whereby the Room is licensed by the
+                    Householder and taken by the Lodger during the Term upon making the Accommodation Payment.
+                  </p>
+
+                  <p className="font-bold mt-3">PART 1 - PARTICULARS</p>
+                  <div className="pl-3 space-y-1">
+                    <p><strong>PROPERTY:</strong> {tenancy.address}</p>
+                    <p><strong>ROOM:</strong> {tenancy.room_description || 'Means the room or rooms in the Property which the Householder allocates to the Lodger'}</p>
+                    <p><strong>SHARED AREAS:</strong> {tenancy.shared_areas || 'Entrance hall, staircase and landings, kitchen for cooking and storage, lavatory and bathroom, sitting room, garden (where applicable)'}</p>
+                    <p><strong>HOUSEHOLDER (Landlord):</strong> [Landlord Name]</p>
+                    <p><strong>LODGER:</strong> {user.fullName}</p>
+                    <p><strong>START DATE:</strong> {new Date(tenancy.start_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</p>
+                    <p><strong>TERM:</strong> {tenancy.initial_term_months} Months Rolling Contract until Terminated by either party</p>
+                    <p><strong>INITIAL PAYMENT:</strong> £{tenancy.initial_payment} (current and month in advance payment)</p>
+                    <p><strong>ACCOMMODATION PAYMENT:</strong> £{tenancy.monthly_rent} per 28 days</p>
+                    <p><strong>PAYMENT DAY:</strong> The day of signing this agreement</p>
+                    <p><strong>DEPOSIT:</strong> £{tenancy.deposit_amount || 0} {tenancy.deposit_applicable ? '(Applicable - Yes)' : '(Not Applicable - No)'}</p>
+                  </div>
+
+                  <p className="font-bold mt-3">EARLY TERMINATION:</p>
+                  <p className="text-gray-700">
+                    Either party may at any time end this Agreement earlier than the End Date by giving notice in writing of at least
+                    one calendar month ending on the Payment Day. If within the rental term any deposits taken will be void unless mutually agreed by both parties.
+                  </p>
+
+                  <p className="font-bold mt-3">UTILITY COSTS:</p>
+                  <p className="text-gray-700">
+                    All utilities including gas, electric, water, basic internet, and Council Tax are <strong>INCLUDED</strong>.
+                  </p>
+                  <p className="text-gray-700">
+                    <strong>Excluded Utility Cost:</strong> Television License is NOT included. If the lodger would like to view any LIVE
+                    broadcast, the lodger accepts responsibility to pay for the television licence and provide evidence of purchase at their own expense (BBC iPlayer etc).
+                  </p>
+
+                  <p className="font-bold mt-4">NOW IT IS AGREED AS FOLLOWS:</p>
+
+                  <p className="font-semibold mt-3">1. About the Licence to Occupy a Room in the Property</p>
+                  <div className="pl-3 space-y-1">
+                    <p>1.1. The Householder permits the Lodger to occupy the Room until either party ends the arrangement as provided for under clause 9 of this agreement.</p>
+                    <p>1.2. The Lodger will occupy the Room personally and shall not share the Room with any other person, except where the Lodger has asked to share the Room with another person and the Householder has agreed in writing.</p>
+                    <p>1.3. The Lodger shall have use of the Contents in the Room, an inventory of which will be prepared by the Householder and provided to the Lodger.</p>
+                    <p>1.4. The Lodger may use the facilities of the Shared Areas of the Property in common with the Householder but only in conjunction with their occupation of the Room.</p>
+                    <p>1.5. This agreement is <strong>NOT</strong> intended to confer exclusive possession upon the Lodger nor to create the relationship of landlord and tenant. The Lodger shall not be entitled to an assured tenancy or statutory periodic tenancy under the Housing Act 1988.</p>
+                    <p>1.6. This agreement is personal to the Lodger, cannot be assigned to any other party, and can be terminated by either party on notice.</p>
+                    <p>1.7. It is a condition of this agreement that the Lodger maintain a "Right to Rent" as defined by the Immigration Act 2014 at all times during the Term.</p>
+                  </div>
+
+                  <p className="font-semibold mt-3">2. Lodger Obligations</p>
+                  <p className="font-medium">2.1. Payments</p>
+                  <div className="pl-3 space-y-1">
+                    <p>2.1.1. To pay the Accommodation Payment at the times and in the manner set out above.</p>
+                    <p>2.1.2. To pay simple interest at 3% above Bank of England base rate upon any payment which is not paid within 14 days after the due date.</p>
+                  </div>
+
+                  <p className="font-medium mt-2">2.2. Utilities</p>
+                  <div className="pl-3 space-y-1">
+                    <p>2.2.1. To make only reasonable use of the Utilities consistent with ordinary residential use by a single occupier.</p>
+                  </div>
+
+                  <p className="font-medium mt-2">2.3. Use of the Property</p>
+                  <div className="pl-3 space-y-1">
+                    <p>2.3.1. Not to use or occupy the Room in any way other than as a private residence.</p>
+                    <p>2.3.2. Not to let or share any rooms or take in any lodger or paying guest. With the Householder's prior permission, occasional overnight visitors allowed.</p>
+                  </div>
+
+                  <p className="font-medium mt-2">2.4. Maintenance</p>
+                  <div className="pl-3 space-y-1">
+                    <p>2.4.1. To keep the Room and all Shared Parts in good and clean condition.</p>
+                    <p>2.4.2. To keep the Contents in good condition and not remove any articles from the Room.</p>
+                    <p>2.4.3. To make good all damage to Contents and replace items broken or damaged.</p>
+                  </div>
+
+                  <p className="font-medium mt-2">2.5. Activities at the Property</p>
+                  <div className="pl-3 space-y-1">
+                    <p>2.5.1. Not to smoke cigarettes, cigars, pipes or any other substances in the Property - <strong>outside only</strong>.</p>
+                    <p>2.5.2. To cook at the Property only in the kitchen.</p>
+                    <p>2.5.3. Not to keep any pet or animal without the Householder's prior consent.</p>
+                    <p>2.5.4. Not to make any alteration, addition, redecoration or painting without written consent.</p>
+                    <p>2.5.5. Not to do anything which may be a nuisance or prejudice the insurance of the Property.</p>
+                    <p>2.5.6. To ensure the Room is cleaned weekly and all rubbish disposed of daily with proper recycling.</p>
+                  </div>
+
+                  <p className="font-medium mt-2">2.6. Other Obligations</p>
+                  <div className="pl-3 space-y-1">
+                    <p>2.6.1. To comply with Right to Rent checks and provide required documents.</p>
+                    <p>2.6.2. To assist with Council Tax discount/exemption applications if applicable.</p>
+                  </div>
+
+                  <p className="font-medium mt-2">2.7. At the End of Agreement</p>
+                  <div className="pl-3 space-y-1">
+                    <p>2.7.1. To vacate the Room and leave in same clean and tidy state (fair wear and tear excepted), returning all keys.</p>
+                    <p>2.7.2. To provide forwarding address and remove all rubbish and personal items before leaving.</p>
+                  </div>
+
+                  <p className="font-semibold mt-3">3. Householder Obligations</p>
+                  <div className="pl-3 space-y-1">
+                    <p>3.1. To keep in good repair the structure, exterior, drains, gutters and installations for water, gas, electricity, sanitation, heating.</p>
+                    <p>3.2. To keep in good repair fixtures and fittings provided for use by the Lodger.</p>
+                    <p>3.3. To comply with Gas Safety Regulations 1998 - annual gas appliance checks by Gas Safe-registered installer.</p>
+                    <p>3.4. To ensure furniture and furnishings comply with Fire Safety Regulations 1988.</p>
+                    <p>3.5. To ensure all electrical equipment is kept in good repair.</p>
+                    <p>3.6. To install and maintain smoke detectors and carbon monoxide detectors.</p>
+                    <p>3.7. To ensure the Room and Shared Areas are fit for human habitation.</p>
+                    <p>3.8. To pay the Council Tax for the Property during the Term.</p>
+                    <p>3.9. To warrant they have permission to take in lodgers in the Property.</p>
+                  </div>
+
+                  <p className="font-semibold mt-3">4. Amicable Sharing</p>
+                  <div className="pl-3 space-y-1">
+                    <p>4.1. The Lodger shall use best efforts to share the use of the Room and Property amicably and peaceably with the Householder. The Lodger shall not interfere with or obstruct such shared occupation.</p>
+                    <p>4.2. Both parties will respect each other's reasonable needs for privacy and decency. Nothing in this clause grants the Lodger exclusive possession.</p>
+                  </div>
+
+                  <p className="font-semibold mt-3">5. Keys</p>
+                  <div className="pl-3 space-y-1">
+                    <p>5.1. The Householder shall give the Lodger one set of keys to the Room and Property.</p>
+                    <p>5.2. The Lodger will keep safe any keys and pay reasonable costs for any loss.</p>
+                    <p>5.3. The Householder retains their own keys and may obtain free entry to the Room at any reasonable time.</p>
+                  </div>
+
+                  <p className="font-semibold mt-3">6. Deposit (if applicable)</p>
+                  <div className="pl-3 space-y-1">
+                    <p>6.1. The Deposit will be held by the Householder during the Term. No interest will be payable.</p>
+                    <p>6.2. The Householder is NOT required to protect the Deposit with a Government approved protection scheme.</p>
+                    <p>6.3. At end of Term the Deposit will be refunded less any reasonable deductions for breaches of obligations.</p>
+                    <p>6.4. The Deposit shall be repaid as soon as reasonably practicable, not exceeding one month (except exceptional circumstances).</p>
+                  </div>
+
+                  <p className="font-semibold mt-3">7. Uninhabitability</p>
+                  <p className="pl-3">In the event of destruction or damage making the Property uninhabitable, the Lodger shall be relieved from making Payment proportionate to the extent prevented from living in the Property (unless caused by Lodger's act or default).</p>
+
+                  <p className="font-semibold mt-3">8. Moving to Another Room</p>
+                  <div className="pl-3 space-y-1">
+                    <p>8.1. The Householder may give reasonable written notice directing the Lodger to use another room of similar size and condition.</p>
+                    <p>8.2. Notice must give minimum 48 hours to move or reasonable time in circumstances.</p>
+                  </div>
+
+                  <p className="font-semibold mt-3">9. Ending this Agreement</p>
+                  <div className="pl-3 space-y-1">
+                    <p><strong>9.1. Termination for Breach:</strong> If Lodger breaches any term, or payments are 14+ days late, or Lodger is declared bankrupt, the Householder may give 7 days notice to remedy. If breach not remedied after 7 days, landlord may terminate with further 14 days notice.</p>
+                    <p><strong>9.2. Break Clause:</strong> Either party may terminate by giving one calendar month written notice expiring the day before a Payment Day. Upon expiry this Agreement shall end with no further liability except existing breaches.</p>
+                    <p><strong>9.3. Behaviour Clause:</strong> If the Householder deems behaviour unacceptable, they will provide written warning notice. If behaviour not corrected, Householder may terminate with maximum 14 days notice (or immediate effect for aggressive behaviour).</p>
+                    <p><strong>9.4.</strong> At end of agreement, Lodger must remove all items. Items left behind (except perishable food) will be stored for 14 days then disposed of.</p>
+                  </div>
+
+                  <p className="font-semibold mt-3">10. About the Legal Effect of this Agreement</p>
+                  <div className="pl-3 space-y-1">
+                    <p>10.1. If any term is held to be illegal or unenforceable, that term shall be deemed not to form part of this agreement and the remainder shall not be affected.</p>
+                    <p>10.2. This agreement shall be exclusively governed by and interpreted in accordance with the laws of England and Wales, and parties agree to submit to the exclusive jurisdiction of the English Courts.</p>
+                    <p>10.3. This agreement embodies the entire understanding of the parties relating to the Room and Property and all matters dealt with.</p>
+                  </div>
+
+                  <p className="font-semibold mt-3">11. Definitions and Interpretation</p>
+                  <div className="pl-3 space-y-1">
+                    <p>11.1. "the Room" means such room or rooms in the Property as the Householder shall allocate to the Lodger.</p>
+                    <p>11.2. "the Contents" means the furniture and Householder's possessions used by the Lodger.</p>
+                    <p>11.3. "Deposit" means the sum to be held as security against breaches of Lodger's obligations.</p>
+                    <p>11.4. "Householder" includes successors in title to the Householder's interest in the Property.</p>
+                    <p>11.5. "Lodger" means the person identified who the Householder permits to occupy a Room.</p>
+                    <p>11.6. "Property" means the Property along with its exterior, common areas and all Contents.</p>
+                    <p>11.7. "Shared Areas" means the rooms the Householder has agreed may be used by Lodgers.</p>
+                    <p>11.8. "Accommodation Payment" means the sum payable in advance in equal instalments on Payment Days.</p>
+                    <p>11.9. "Payment Day" means the days specified on which Accommodation Payment should be paid.</p>
+                    <p>11.10. "Term" means a fixed term between the Start Date and End Date.</p>
+                    <p>11.11. "Utilities" means electricity, gas, water, drainage, heating, telephone, television, internet and all other utilities.</p>
+                  </div>
+
+                  <p className="text-xs text-gray-500 mt-4 italic border-t pt-3">
+                    Please read this entire agreement carefully. By accepting, you confirm you have read,
+                    understood, and agree to all terms and conditions. This is a legally binding agreement.
+                  </p>
+                </div>
+              </div>
+
+              {/* Photo ID Upload */}
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <h3 className="font-semibold mb-3">Upload Photo ID (Required)</h3>
+                <p className="text-sm text-gray-600 mb-4">
+                  Please upload a clear photo of your passport, driving licence, or national ID card for Right to Rent verification.
+                </p>
+                <input
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={handlePhotoIdChange}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                />
+                {photoIdPreview && (
+                  <div className="mt-4">
+                    <img src={photoIdPreview} alt="ID Preview" className="max-w-xs rounded border" />
+                  </div>
+                )}
+              </div>
+
+              {/* Agreement Checkbox */}
+              <div className="border-t pt-4">
+                <label className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={agreedToTerms}
+                    onChange={(e) => setAgreedToTerms(e.target.checked)}
+                    className="mt-1 w-5 h-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <span className="text-sm text-gray-700">
+                    I have read and agree to the terms and conditions of this lodger licence agreement. I understand this is not a tenancy and I do not have exclusive possession of the property.
+                  </span>
+                </label>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  onClick={handleAcceptAgreement}
+                  disabled={!agreedToTerms || !photoIdFile || uploadingAgreement}
+                  className={`flex-1 py-3 rounded-lg font-semibold transition ${
+                    agreedToTerms && photoIdFile && !uploadingAgreement
+                      ? 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                  }`}
+                >
+                  {uploadingAgreement ? 'Processing...' : 'Accept Agreement & Continue'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
