@@ -38,9 +38,9 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
   const [showTenancyModal, setShowTenancyModal] = useState(false);
   const [showNoticeModal, setShowNoticeModal] = useState(false);
   const [noticeForm, setNoticeForm] = useState({
-    notice_period_days: 28,
     reason: '',
-    breach_type: '',
+    sub_reason: '',
+    notice_period_days: 28,
     additional_notes: ''
   });
   const [notifications, setNotifications] = useState([]);
@@ -184,9 +184,9 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
 
       // Prepare notice data
       const noticeData = {
-        notice_period_days: noticeForm.notice_period_days,
         reason: noticeForm.reason,
-        breach_type: noticeForm.breach_type,
+        sub_reason: noticeForm.sub_reason,
+        notice_period_days: noticeForm.notice_period_days,
         additional_notes: noticeForm.additional_notes
       };
 
@@ -198,18 +198,18 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
 
       // Reset form and refresh data
       setNoticeForm({
-        notice_period_days: 28,
         reason: '',
-        breach_type: '',
+        sub_reason: '',
+        notice_period_days: 28,
         additional_notes: ''
       });
       setShowNoticeModal(false);
       setSelectedTenancy(null);
       fetchDashboardData();
 
-      const immediateTermination = noticeForm.breach_type === 'violence' || noticeForm.breach_type === 'criminal_activity';
+      const immediateTermination = noticeForm.notice_period_days === 0;
       alert(immediateTermination
-        ? 'IMMEDIATE TERMINATION NOTICE: The tenancy has been terminated immediately due to serious breach. Please contact authorities if necessary.'
+        ? 'IMMEDIATE TERMINATION NOTICE: The tenancy has been terminated immediately. Please contact authorities if necessary.'
         : 'Notice has been given successfully. The lodger will be notified.');
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to give notice');
@@ -1170,115 +1170,123 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
               <p className="text-sm opacity-90 mt-1">Lodger: {selectedTenancy.lodger_name}</p>
             </div>
 
-            <form onSubmit={handleGiveNotice} className="p-6 space-y-4">
+            <form onSubmit={handleGiveNotice} className="p-6 space-y-5">
               <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm text-orange-800">
-                <strong>Important:</strong> According to the Lodger Agreement, either party may terminate the tenancy by giving notice.
-                The standard notice period is 28 days, but you can adjust this if agreed.
+                <strong>Important:</strong> Select reason, then specific sub-reason, then notice period.
               </div>
 
+              {/* Step 1: Main Reason */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Reason for Termination *</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  <span className="bg-indigo-600 text-white rounded-full w-6 h-6 inline-flex items-center justify-center text-xs mr-2">1</span>
+                  Reason for Termination *
+                </label>
                 <select
                   required
                   value={noticeForm.reason}
                   onChange={(e) => {
-                    const newReason = e.target.value;
                     setNoticeForm({
                       ...noticeForm,
-                      reason: newReason,
-                      breach_type: '',
-                      notice_period_days: newReason === 'breach_of_agreement' ? 0 : 28
+                      reason: e.target.value,
+                      sub_reason: '',
+                      notice_period_days: 28
                     });
                   }}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                 >
                   <option value="">Select a reason...</option>
-                  <option value="end_of_term">End of agreed term</option>
-                  <option value="property_sale">Selling the property</option>
-                  <option value="personal_use">Need property for personal use</option>
-                  <option value="breach_of_agreement">Breach of agreement by lodger</option>
+                  <option value="breach">Breach of Agreement</option>
+                  <option value="end_term">End of Agreed Term</option>
+                  <option value="landlord_needs">Landlord Needs</option>
                   <option value="other">Other</option>
                 </select>
               </div>
 
-              {noticeForm.reason === 'breach_of_agreement' && (
-                <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 space-y-4">
-                  <div className="flex items-start gap-2 text-red-800 mb-3">
-                    <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
-                    <div className="text-sm">
-                      <strong>Breach of Agreement:</strong> Please specify the type of breach. Some breaches allow immediate termination per the agreement.
-                    </div>
-                  </div>
+              {/* Step 2: Sub-reason based on main reason */}
+              {noticeForm.reason && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <span className="bg-indigo-600 text-white rounded-full w-6 h-6 inline-flex items-center justify-center text-xs mr-2">2</span>
+                    Specific Reason *
+                  </label>
+                  <select
+                    required
+                    value={noticeForm.sub_reason}
+                    onChange={(e) => {
+                      setNoticeForm({
+                        ...noticeForm,
+                        sub_reason: e.target.value,
+                        notice_period_days: 28
+                      });
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  >
+                    <option value="">Select specific reason...</option>
 
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Type of Breach *</label>
-                    <select
-                      required
-                      value={noticeForm.breach_type}
-                      onChange={(e) => {
-                        const breachType = e.target.value;
-                        const immediate = breachType === 'violence' || breachType === 'criminal_activity';
-                        setNoticeForm({
-                          ...noticeForm,
-                          breach_type: breachType,
-                          notice_period_days: immediate ? 0 : 7
-                        });
-                      }}
-                      className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 bg-white"
-                    >
-                      <option value="">Select breach type...</option>
-                      <option value="violence">Violence or threats (IMMEDIATE TERMINATION)</option>
-                      <option value="criminal_activity">Criminal activity on premises (IMMEDIATE TERMINATION)</option>
-                      <option value="non_payment">Non-payment of rent (7 days notice)</option>
-                      <option value="damage_to_property">Damage to property (7 days notice)</option>
-                      <option value="nuisance">Causing nuisance to others (7 days notice)</option>
-                      <option value="unauthorized_occupants">Unauthorized occupants (7 days notice)</option>
-                      <option value="other_breach">Other breach of terms (7 days notice)</option>
-                    </select>
-                  </div>
+                    {noticeForm.reason === 'breach' && (
+                      <>
+                        <option value="violence">Violence or threats</option>
+                        <option value="criminal_activity">Criminal activity on premises</option>
+                        <option value="non_payment">Non-payment of rent</option>
+                        <option value="damage_to_property">Damage to property</option>
+                        <option value="nuisance">Causing nuisance to others</option>
+                        <option value="unauthorized_occupants">Unauthorized occupants</option>
+                        <option value="other_breach">Other breach of terms</option>
+                      </>
+                    )}
 
-                  {(noticeForm.breach_type === 'violence' || noticeForm.breach_type === 'criminal_activity') && (
-                    <div className="bg-red-100 border-2 border-red-400 rounded-lg p-3">
-                      <p className="text-sm font-bold text-red-900 mb-2">⚠️ IMMEDIATE TERMINATION</p>
-                      <p className="text-xs text-red-800">
-                        This breach allows for immediate termination without notice period as per the agreement.
-                        The lodger must vacate the property immediately. Consider contacting the police if necessary.
-                      </p>
-                    </div>
-                  )}
+                    {noticeForm.reason === 'end_term' && (
+                      <>
+                        <option value="initial_term_ending">Initial term ending</option>
+                        <option value="no_renewal">Not renewing agreement</option>
+                      </>
+                    )}
+
+                    {noticeForm.reason === 'landlord_needs' && (
+                      <>
+                        <option value="property_sale">Selling the property</option>
+                        <option value="personal_use">Need property for personal use</option>
+                        <option value="renovation">Major renovation required</option>
+                      </>
+                    )}
+
+                    {noticeForm.reason === 'other' && (
+                      <option value="other_reason">Other (specify in notes)</option>
+                    )}
+                  </select>
                 </div>
               )}
 
-              {noticeForm.reason !== 'breach_of_agreement' && (
+              {/* Step 3: Notice Period */}
+              {noticeForm.sub_reason && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Notice Period (days) *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    <span className="bg-indigo-600 text-white rounded-full w-6 h-6 inline-flex items-center justify-center text-xs mr-2">3</span>
+                    Notice Period *
+                  </label>
                   <select
                     required
                     value={noticeForm.notice_period_days}
                     onChange={(e) => setNoticeForm({...noticeForm, notice_period_days: parseInt(e.target.value)})}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                   >
+                    <option value={0}>0 days (Immediate)</option>
+                    <option value={3}>3 days</option>
                     <option value={7}>7 days</option>
                     <option value={14}>14 days</option>
                     <option value={28}>28 days (Standard)</option>
-                    <option value={56}>56 days</option>
                   </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    Tenancy will end on: {new Date(Date.now() + noticeForm.notice_period_days * 24 * 60 * 60 * 1000).toLocaleDateString()}
-                  </p>
-                </div>
-              )}
 
-              {noticeForm.reason === 'breach_of_agreement' && noticeForm.breach_type && (
-                <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
-                  <p className="text-sm font-medium text-gray-700 mb-1">Notice Period:
-                    <span className={`ml-2 font-bold ${noticeForm.notice_period_days === 0 ? 'text-red-600' : 'text-orange-600'}`}>
-                      {noticeForm.notice_period_days === 0 ? 'IMMEDIATE' : `${noticeForm.notice_period_days} days`}
-                    </span>
-                  </p>
-                  {noticeForm.notice_period_days > 0 && (
-                    <p className="text-xs text-gray-600">
-                      Tenancy will end on: {new Date(Date.now() + noticeForm.notice_period_days * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                  {noticeForm.notice_period_days === 0 ? (
+                    <div className="mt-3 bg-red-50 border-2 border-red-400 rounded-lg p-3">
+                      <p className="text-sm font-bold text-red-900 mb-1">⚠️ IMMEDIATE TERMINATION</p>
+                      <p className="text-xs text-red-800">
+                        The tenancy will be terminated immediately. The lodger must vacate the property now.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-500 mt-2">
+                      Tenancy will end on: <strong>{new Date(Date.now() + noticeForm.notice_period_days * 24 * 60 * 60 * 1000).toLocaleDateString()}</strong>
                     </p>
                   )}
                 </div>
@@ -1308,9 +1316,9 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                     setShowNoticeModal(false);
                     setSelectedTenancy(null);
                     setNoticeForm({
-                      notice_period_days: 28,
                       reason: '',
-                      breach_type: '',
+                      sub_reason: '',
+                      notice_period_days: 28,
                       additional_notes: ''
                     });
                   }}

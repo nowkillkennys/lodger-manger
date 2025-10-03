@@ -166,7 +166,9 @@ app.post('/api/auth/login', async (req, res) => {
                 id: user.id,
                 email: user.email,
                 user_type: user.user_type,
-                full_name: user.full_name
+                full_name: user.full_name,
+                phone: user.phone,
+                address: user.address
             }
         });
     } catch (error) {
@@ -339,13 +341,107 @@ app.post('/api/users/:id/reset-password', authenticateToken, requireRole('landlo
     }
 });
 
+// Update own profile
+app.put('/api/users/profile', authenticateToken, async (req, res) => {
+    try {
+        const { full_name, phone, address, email } = req.body;
+        const userId = req.user.id;
+
+        // Build update query dynamically
+        const updates = [];
+        const values = [];
+        let paramCount = 1;
+
+        if (full_name !== undefined) {
+            updates.push(`full_name = $${paramCount++}`);
+            values.push(full_name);
+        }
+        if (phone !== undefined) {
+            updates.push(`phone = $${paramCount++}`);
+            values.push(phone);
+        }
+        if (address !== undefined) {
+            updates.push(`address = $${paramCount++}`);
+            values.push(address);
+        }
+        if (email !== undefined) {
+            updates.push(`email = $${paramCount++}`);
+            values.push(email);
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        updates.push(`updated_at = CURRENT_TIMESTAMP`);
+        values.push(userId);
+
+        const result = await pool.query(
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone, address`,
+            values
+        );
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Update profile error:', error);
+        res.status(500).json({ error: 'Failed to update profile' });
+    }
+});
+
+// Update lodger info (landlord/admin only)
+app.put('/api/users/:id', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { full_name, phone, email } = req.body;
+
+        // Build update query dynamically
+        const updates = [];
+        const values = [];
+        let paramCount = 1;
+
+        if (full_name !== undefined) {
+            updates.push(`full_name = $${paramCount++}`);
+            values.push(full_name);
+        }
+        if (phone !== undefined) {
+            updates.push(`phone = $${paramCount++}`);
+            values.push(phone);
+        }
+        if (email !== undefined) {
+            updates.push(`email = $${paramCount++}`);
+            values.push(email);
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        updates.push(`updated_at = CURRENT_TIMESTAMP`);
+        values.push(id);
+
+        const result = await pool.query(
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone`,
+            values
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Update user error:', error);
+        res.status(500).json({ error: 'Failed to update user' });
+    }
+});
+
 // List users (landlord/admin only)
 app.get('/api/users', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
     try {
         const result = await pool.query(
             'SELECT id, email, user_type, full_name, phone, is_active, created_at FROM users ORDER BY created_at DESC'
         );
-        
+
         res.json(result.rows);
     } catch (error) {
         console.error('List users error:', error);
@@ -914,7 +1010,7 @@ app.post('/api/tenancies/:id/notice', authenticateToken, requireRole('landlord',
     const client = await pool.connect();
     try {
         const { id: tenancyId } = req.params;
-        const { notice_period_days, reason, breach_type, additional_notes } = req.body;
+        const { reason, sub_reason, notice_period_days, additional_notes } = req.body;
 
         await client.query('BEGIN');
 
@@ -936,22 +1032,38 @@ app.post('/api/tenancies/:id/notice', authenticateToken, requireRole('landlord',
         const effectiveDate = new Date();
         effectiveDate.setDate(effectiveDate.getDate() + parseInt(notice_period_days));
 
-        // Determine notice type based on breach
-        const noticeType = reason === 'breach_of_agreement' ? 'breach' : 'termination';
+        // Determine notice type based on reason
+        const noticeType = reason === 'breach' ? 'breach' : 'termination';
 
-        // Build reason text with breach details
-        let reasonText = reason;
-        if (breach_type) {
-            const breachLabels = {
-                'violence': 'Violence or threats (IMMEDIATE TERMINATION)',
-                'criminal_activity': 'Criminal activity on premises (IMMEDIATE TERMINATION)',
-                'non_payment': 'Non-payment of rent',
-                'damage_to_property': 'Damage to property',
-                'nuisance': 'Causing nuisance to others',
-                'unauthorized_occupants': 'Unauthorized occupants',
-                'other_breach': 'Other breach of terms'
-            };
-            reasonText = `Breach of agreement: ${breachLabels[breach_type] || breach_type}`;
+        // Map reason categories to labels
+        const reasonLabels = {
+            'breach': 'Breach of Agreement',
+            'end_term': 'End of Agreed Term',
+            'landlord_needs': 'Landlord Needs',
+            'other': 'Other'
+        };
+
+        // Map sub-reasons to labels
+        const subReasonLabels = {
+            'violence': 'Violence or threats',
+            'criminal_activity': 'Criminal activity on premises',
+            'non_payment': 'Non-payment of rent',
+            'damage_to_property': 'Damage to property',
+            'nuisance': 'Causing nuisance to others',
+            'unauthorized_occupants': 'Unauthorized occupants',
+            'other_breach': 'Other breach of terms',
+            'initial_term_ending': 'Initial term ending',
+            'no_renewal': 'Not renewing agreement',
+            'property_sale': 'Selling the property',
+            'personal_use': 'Need property for personal use',
+            'renovation': 'Major renovation required',
+            'other_reason': 'Other'
+        };
+
+        // Build reason text
+        let reasonText = `${reasonLabels[reason] || reason}: ${subReasonLabels[sub_reason] || sub_reason}`;
+        if (notice_period_days === 0) {
+            reasonText += ' (IMMEDIATE TERMINATION)';
         }
         if (additional_notes) {
             reasonText += `\n\nAdditional notes: ${additional_notes}`;
@@ -979,7 +1091,7 @@ app.post('/api/tenancies/:id/notice', authenticateToken, requireRole('landlord',
             noticeDate,
             effectiveDate,
             reasonText,
-            breach_type || null,
+            sub_reason || null,
             'active'
         ]);
 
