@@ -27,10 +27,22 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
     initial_payment: '',
     deposit_applicable: false,
     deposit_amount: '',
-    shared_areas: ''
+    shared_areas: {
+      kitchen: false,
+      bathroom: false,
+      living_room: false,
+      garden: false
+    }
   });
   const [selectedTenancy, setSelectedTenancy] = useState(null);
   const [showTenancyModal, setShowTenancyModal] = useState(false);
+  const [showNoticeModal, setShowNoticeModal] = useState(false);
+  const [noticeForm, setNoticeForm] = useState({
+    notice_period_days: 28,
+    reason: '',
+    breach_type: '',
+    additional_notes: ''
+  });
   const [notifications, setNotifications] = useState([]);
   const [stats, setStats] = useState({
     activeTenancies: 0,
@@ -117,6 +129,11 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
       const token = localStorage.getItem('token');
 
       // Prepare tenancy data
+      const selectedSharedAreas = Object.keys(newTenancy.shared_areas)
+        .filter(area => newTenancy.shared_areas[area])
+        .map(area => area.replace('_', ' '))
+        .join(', ');
+
       const tenancyData = {
         lodger_id: newTenancy.lodger_id,
         property_address: newTenancy.property_address,
@@ -127,7 +144,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
         initial_payment: parseFloat(newTenancy.initial_payment),
         deposit_applicable: newTenancy.deposit_applicable,
         deposit_amount: newTenancy.deposit_applicable ? parseFloat(newTenancy.deposit_amount) : 0,
-        shared_areas: newTenancy.shared_areas
+        shared_areas: selectedSharedAreas
       };
 
       await axios.post(`${API_URL}/api/tenancies`, tenancyData, {
@@ -145,13 +162,57 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
         initial_payment: '',
         deposit_applicable: false,
         deposit_amount: '',
-        shared_areas: ''
+        shared_areas: {
+          kitchen: false,
+          bathroom: false,
+          living_room: false,
+          garden: false
+        }
       });
       setShowCreateTenancy(false);
       fetchDashboardData();
       alert('Tenancy created successfully!');
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to create tenancy');
+    }
+  };
+
+  const handleGiveNotice = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+
+      // Prepare notice data
+      const noticeData = {
+        notice_period_days: noticeForm.notice_period_days,
+        reason: noticeForm.reason,
+        breach_type: noticeForm.breach_type,
+        additional_notes: noticeForm.additional_notes
+      };
+
+      await axios.post(
+        `${API_URL}/api/tenancies/${selectedTenancy.id}/notice`,
+        noticeData,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      // Reset form and refresh data
+      setNoticeForm({
+        notice_period_days: 28,
+        reason: '',
+        breach_type: '',
+        additional_notes: ''
+      });
+      setShowNoticeModal(false);
+      setSelectedTenancy(null);
+      fetchDashboardData();
+
+      const immediateTermination = noticeForm.breach_type === 'violence' || noticeForm.breach_type === 'criminal_activity';
+      alert(immediateTermination
+        ? 'IMMEDIATE TERMINATION NOTICE: The tenancy has been terminated immediately due to serious breach. Please contact authorities if necessary.'
+        : 'Notice has been given successfully. The lodger will be notified.');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to give notice');
     }
   };
 
@@ -539,27 +600,69 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                     <p className="text-xs text-gray-500 mt-1">Auto-filled from your profile</p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Room Description *</label>
-                      <input
-                        type="text"
-                        required
-                        value={newTenancy.room_description}
-                        onChange={(e) => setNewTenancy({...newTenancy, room_description: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        placeholder="e.g., Double room with ensuite"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Shared Areas</label>
-                      <input
-                        type="text"
-                        value={newTenancy.shared_areas}
-                        onChange={(e) => setNewTenancy({...newTenancy, shared_areas: e.target.value})}
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-                        placeholder="e.g., Kitchen, living room, bathroom"
-                      />
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Room Description *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newTenancy.room_description}
+                      onChange={(e) => setNewTenancy({...newTenancy, room_description: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      placeholder="e.g., Double room with ensuite"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-3">Shared Areas</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <label className="flex items-center gap-2 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newTenancy.shared_areas.kitchen}
+                          onChange={(e) => setNewTenancy({
+                            ...newTenancy,
+                            shared_areas: {...newTenancy.shared_areas, kitchen: e.target.checked}
+                          })}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm font-medium">Kitchen</span>
+                      </label>
+                      <label className="flex items-center gap-2 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newTenancy.shared_areas.bathroom}
+                          onChange={(e) => setNewTenancy({
+                            ...newTenancy,
+                            shared_areas: {...newTenancy.shared_areas, bathroom: e.target.checked}
+                          })}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm font-medium">Bathroom</span>
+                      </label>
+                      <label className="flex items-center gap-2 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newTenancy.shared_areas.living_room}
+                          onChange={(e) => setNewTenancy({
+                            ...newTenancy,
+                            shared_areas: {...newTenancy.shared_areas, living_room: e.target.checked}
+                          })}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm font-medium">Living Room</span>
+                      </label>
+                      <label className="flex items-center gap-2 p-3 border border-gray-300 rounded-lg hover:bg-gray-50 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={newTenancy.shared_areas.garden}
+                          onChange={(e) => setNewTenancy({
+                            ...newTenancy,
+                            shared_areas: {...newTenancy.shared_areas, garden: e.target.checked}
+                          })}
+                          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                        <span className="text-sm font-medium">Garden</span>
+                      </label>
                     </div>
                   </div>
 
@@ -671,7 +774,12 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                           initial_payment: '',
                           deposit_applicable: false,
                           deposit_amount: '',
-                          shared_areas: ''
+                          shared_areas: {
+                            kitchen: false,
+                            bathroom: false,
+                            living_room: false,
+                            garden: false
+                          }
                         });
                       }}
                       className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
@@ -708,26 +816,65 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                       </div>
                     </div>
                     
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => {
-                          setSelectedTenancy(tenancy);
-                          setShowTenancyModal(true);
-                        }}
-                        className="flex-1 border border-gray-300 px-3 py-2 rounded-lg hover:bg-gray-50 transition flex items-center justify-center gap-2 text-sm"
-                      >
-                        <Eye className="w-4 h-4" />
-                        View
-                      </button>
-                      {tenancy.lodger_signature && (
-                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium flex items-center gap-1">
-                          ✓ Signed
-                        </span>
-                      )}
-                      {!tenancy.lodger_signature && (
-                        <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                          Pending
-                        </span>
+                    <div className="space-y-2">
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            setSelectedTenancy(tenancy);
+                            setShowTenancyModal(true);
+                          }}
+                          className="flex-1 border border-indigo-600 text-indigo-600 px-3 py-2 rounded-lg hover:bg-indigo-50 transition flex items-center justify-center gap-2 text-sm font-medium"
+                        >
+                          <Eye className="w-4 h-4" />
+                          View Details
+                        </button>
+                        {tenancy.lodger_signature && (
+                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium flex items-center gap-1">
+                            ✓ Signed
+                          </span>
+                        )}
+                        {!tenancy.lodger_signature && (
+                          <span className="px-2 py-1 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                            Pending
+                          </span>
+                        )}
+                      </div>
+                      {tenancy.status === 'active' && (
+                        <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => {
+                                // TODO: Navigate to payment schedule
+                                alert('Payment schedule coming soon');
+                              }}
+                              className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 text-xs font-medium"
+                            >
+                              <CreditCard className="w-4 h-4" />
+                              Payments
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedTenancy(tenancy);
+                                setShowNoticeModal(true);
+                              }}
+                              className="flex-1 bg-orange-600 text-white px-3 py-2 rounded-lg hover:bg-orange-700 transition flex items-center justify-center gap-2 text-xs font-medium"
+                            >
+                              <Bell className="w-4 h-4" />
+                              Give Notice
+                            </button>
+                          </div>
+                          {tenancy.signed_agreement_path && (
+                            <a
+                              href={`${API_URL}${tenancy.signed_agreement_path}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="w-full bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 transition flex items-center justify-center gap-2 text-xs font-medium"
+                            >
+                              <FileText className="w-4 h-4" />
+                              View Agreement
+                            </a>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
@@ -1010,6 +1157,169 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Give Notice Modal */}
+      {showNoticeModal && selectedTenancy && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full">
+            <div className="bg-orange-600 text-white px-6 py-4 rounded-t-lg">
+              <h2 className="text-2xl font-bold">Give Notice to Terminate Tenancy</h2>
+              <p className="text-sm opacity-90 mt-1">Lodger: {selectedTenancy.lodger_name}</p>
+            </div>
+
+            <form onSubmit={handleGiveNotice} className="p-6 space-y-4">
+              <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm text-orange-800">
+                <strong>Important:</strong> According to the Lodger Agreement, either party may terminate the tenancy by giving notice.
+                The standard notice period is 28 days, but you can adjust this if agreed.
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Reason for Termination *</label>
+                <select
+                  required
+                  value={noticeForm.reason}
+                  onChange={(e) => {
+                    const newReason = e.target.value;
+                    setNoticeForm({
+                      ...noticeForm,
+                      reason: newReason,
+                      breach_type: '',
+                      notice_period_days: newReason === 'breach_of_agreement' ? 0 : 28
+                    });
+                  }}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                >
+                  <option value="">Select a reason...</option>
+                  <option value="end_of_term">End of agreed term</option>
+                  <option value="property_sale">Selling the property</option>
+                  <option value="personal_use">Need property for personal use</option>
+                  <option value="breach_of_agreement">Breach of agreement by lodger</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              {noticeForm.reason === 'breach_of_agreement' && (
+                <div className="bg-red-50 border-2 border-red-200 rounded-lg p-4 space-y-4">
+                  <div className="flex items-start gap-2 text-red-800 mb-3">
+                    <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                    <div className="text-sm">
+                      <strong>Breach of Agreement:</strong> Please specify the type of breach. Some breaches allow immediate termination per the agreement.
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Type of Breach *</label>
+                    <select
+                      required
+                      value={noticeForm.breach_type}
+                      onChange={(e) => {
+                        const breachType = e.target.value;
+                        const immediate = breachType === 'violence' || breachType === 'criminal_activity';
+                        setNoticeForm({
+                          ...noticeForm,
+                          breach_type: breachType,
+                          notice_period_days: immediate ? 0 : 7
+                        });
+                      }}
+                      className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 bg-white"
+                    >
+                      <option value="">Select breach type...</option>
+                      <option value="violence">Violence or threats (IMMEDIATE TERMINATION)</option>
+                      <option value="criminal_activity">Criminal activity on premises (IMMEDIATE TERMINATION)</option>
+                      <option value="non_payment">Non-payment of rent (7 days notice)</option>
+                      <option value="damage_to_property">Damage to property (7 days notice)</option>
+                      <option value="nuisance">Causing nuisance to others (7 days notice)</option>
+                      <option value="unauthorized_occupants">Unauthorized occupants (7 days notice)</option>
+                      <option value="other_breach">Other breach of terms (7 days notice)</option>
+                    </select>
+                  </div>
+
+                  {(noticeForm.breach_type === 'violence' || noticeForm.breach_type === 'criminal_activity') && (
+                    <div className="bg-red-100 border-2 border-red-400 rounded-lg p-3">
+                      <p className="text-sm font-bold text-red-900 mb-2">⚠️ IMMEDIATE TERMINATION</p>
+                      <p className="text-xs text-red-800">
+                        This breach allows for immediate termination without notice period as per the agreement.
+                        The lodger must vacate the property immediately. Consider contacting the police if necessary.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {noticeForm.reason !== 'breach_of_agreement' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Notice Period (days) *</label>
+                  <select
+                    required
+                    value={noticeForm.notice_period_days}
+                    onChange={(e) => setNoticeForm({...noticeForm, notice_period_days: parseInt(e.target.value)})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  >
+                    <option value={7}>7 days</option>
+                    <option value={14}>14 days</option>
+                    <option value={28}>28 days (Standard)</option>
+                    <option value={56}>56 days</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Tenancy will end on: {new Date(Date.now() + noticeForm.notice_period_days * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                  </p>
+                </div>
+              )}
+
+              {noticeForm.reason === 'breach_of_agreement' && noticeForm.breach_type && (
+                <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
+                  <p className="text-sm font-medium text-gray-700 mb-1">Notice Period:
+                    <span className={`ml-2 font-bold ${noticeForm.notice_period_days === 0 ? 'text-red-600' : 'text-orange-600'}`}>
+                      {noticeForm.notice_period_days === 0 ? 'IMMEDIATE' : `${noticeForm.notice_period_days} days`}
+                    </span>
+                  </p>
+                  {noticeForm.notice_period_days > 0 && (
+                    <p className="text-xs text-gray-600">
+                      Tenancy will end on: {new Date(Date.now() + noticeForm.notice_period_days * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Additional Notes (Optional)</label>
+                <textarea
+                  value={noticeForm.additional_notes}
+                  onChange={(e) => setNoticeForm({...noticeForm, additional_notes: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500"
+                  rows={4}
+                  placeholder="Any additional information or instructions..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  type="submit"
+                  className="px-6 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-semibold"
+                >
+                  Give Notice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNoticeModal(false);
+                    setSelectedTenancy(null);
+                    setNoticeForm({
+                      notice_period_days: 28,
+                      reason: '',
+                      breach_type: '',
+                      additional_notes: ''
+                    });
+                  }}
+                  className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

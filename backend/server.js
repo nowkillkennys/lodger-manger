@@ -906,12 +906,137 @@ app.post('/api/upload/:type', authenticateToken, upload.single('file'), async (r
 });
 
 // ============================================
+// NOTICES
+// ============================================
+
+// Give notice to terminate tenancy
+app.post('/api/tenancies/:id/notice', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id: tenancyId } = req.params;
+        const { notice_period_days, reason, breach_type, additional_notes } = req.body;
+
+        await client.query('BEGIN');
+
+        // Get tenancy details
+        const tenancyResult = await client.query(
+            'SELECT * FROM tenancies WHERE id = $1',
+            [tenancyId]
+        );
+
+        if (tenancyResult.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: 'Tenancy not found' });
+        }
+
+        const tenancy = tenancyResult.rows[0];
+
+        // Calculate notice and effective dates
+        const noticeDate = new Date();
+        const effectiveDate = new Date();
+        effectiveDate.setDate(effectiveDate.getDate() + parseInt(notice_period_days));
+
+        // Determine notice type based on breach
+        const noticeType = reason === 'breach_of_agreement' ? 'breach' : 'termination';
+
+        // Build reason text with breach details
+        let reasonText = reason;
+        if (breach_type) {
+            const breachLabels = {
+                'violence': 'Violence or threats (IMMEDIATE TERMINATION)',
+                'criminal_activity': 'Criminal activity on premises (IMMEDIATE TERMINATION)',
+                'non_payment': 'Non-payment of rent',
+                'damage_to_property': 'Damage to property',
+                'nuisance': 'Causing nuisance to others',
+                'unauthorized_occupants': 'Unauthorized occupants',
+                'other_breach': 'Other breach of terms'
+            };
+            reasonText = `Breach of agreement: ${breachLabels[breach_type] || breach_type}`;
+        }
+        if (additional_notes) {
+            reasonText += `\n\nAdditional notes: ${additional_notes}`;
+        }
+
+        // Create notice record
+        const noticeResult = await client.query(`
+            INSERT INTO notices (
+                tenancy_id,
+                notice_type,
+                given_by,
+                given_to,
+                notice_date,
+                effective_date,
+                reason,
+                breach_clause,
+                status
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+            RETURNING *
+        `, [
+            tenancyId,
+            noticeType,
+            req.user.userId,
+            tenancy.lodger_id,
+            noticeDate,
+            effectiveDate,
+            reasonText,
+            breach_type || null,
+            'active'
+        ]);
+
+        // If immediate termination, update tenancy status
+        if (notice_period_days === 0) {
+            await client.query(
+                'UPDATE tenancies SET status = $1, termination_date = $2 WHERE id = $3',
+                ['terminated', noticeDate, tenancyId]
+            );
+        }
+
+        await client.query('COMMIT');
+
+        res.json({
+            message: 'Notice given successfully',
+            notice: noticeResult.rows[0],
+            immediate_termination: notice_period_days === 0
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Give notice error:', error);
+        res.status(500).json({ error: 'Failed to give notice' });
+    } finally {
+        client.release();
+    }
+});
+
+// Get notices for a tenancy
+app.get('/api/tenancies/:id/notices', authenticateToken, async (req, res) => {
+    try {
+        const { id: tenancyId } = req.params;
+
+        const result = await pool.query(`
+            SELECT n.*,
+                   u1.full_name as given_by_name,
+                   u2.full_name as given_to_name
+            FROM notices n
+            LEFT JOIN users u1 ON n.given_by = u1.id
+            LEFT JOIN users u2 ON n.given_to = u2.id
+            WHERE n.tenancy_id = $1
+            ORDER BY n.notice_date DESC
+        `, [tenancyId]);
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get notices error:', error);
+        res.status(500).json({ error: 'Failed to fetch notices' });
+    }
+});
+
+// ============================================
 // HEALTH CHECK
 // ============================================
 
 app.get('/api/health', (req, res) => {
-    res.json({ 
-        status: 'ok', 
+    res.json({
+        status: 'ok',
         timestamp: new Date().toISOString(),
         version: '1.0.0'
     });

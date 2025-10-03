@@ -23,16 +23,16 @@ services:
 
   # Backend API
   backend:
-    image: node:18-alpine
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: lodger_backend
-    working_dir: /app
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-postgres123}@postgres:5432/lodger_management
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-this}
       PORT: 3001
     volumes:
-      - ./backend:/app
       - ./uploads:/app/uploads
       - ./backups:/app/backups
     ports:
@@ -40,21 +40,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "npm install && npm start"
     restart: always
 
   # Frontend
   frontend:
-    image: node:18-alpine
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: lodger_frontend
-    working_dir: /app
     environment:
       REACT_APP_API_URL: http://localhost:3001
-    volumes:
-      - ./frontend:/app
     ports:
-      - "3000:3000"
-    command: sh -c "npm install && npm start"
+      - "3000:80"
     restart: always
     depends_on:
       - backend
