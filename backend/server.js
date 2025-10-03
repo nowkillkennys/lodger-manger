@@ -29,7 +29,7 @@ const SALT_ROUNDS = 10;
 // Database connection
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL ||
-        'postgresql://lodger_admin:changeme123@localhost:5432/lodger_management',
+        'postgresql://postgres:postgres123@localhost:5432/lodger_management',
     ssl: false
 });
 

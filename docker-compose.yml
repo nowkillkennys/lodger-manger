@@ -1,4 +1,4 @@
-
+version: "3.8"
 
 services:
   # PostgreSQL Database
@@ -7,8 +7,8 @@ services:
     container_name: lodger_db
     environment:
       POSTGRES_DB: lodger_management
-      POSTGRES_USER: lodger_admin
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme123}
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres123}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups
@@ -16,7 +16,7 @@ services:
       - "5432:5432"
     restart: always
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U lodger_admin -d lodger_management"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d lodger_management"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +28,7 @@ services:
     working_dir: /app
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://lodger_admin:${DB_PASSWORD:-changeme123}@postgres:5432/lodger_management
+      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-postgres123}@postgres:5432/lodger_management
       JWT_SECRET: ${JWT_SECRET:-your-secret-key-change-this}
       PORT: 3001
     volumes:
