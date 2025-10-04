@@ -17,10 +17,12 @@ yarn-error.log*
 /backend/dist
 
 # Upload directories
+uploads/
 /backend/uploads/*
 !/backend/uploads/.gitkeep
 
 # Backup files
+backups/
 /backend/backups/*
 !/backend/backups/.gitkeep
 
@@ -86,4 +88,4 @@ Thumbs.db
 # Compressed files
 *.zip
 *.tar.gz
-*.raruploads/
+*.rar
