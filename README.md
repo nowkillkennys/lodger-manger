@@ -1,113 +1,120 @@
 # 🏠 Lodger Management System
 
-A complete, production-ready web application for managing lodger tenancies with 28-day payment cycles, PDF agreement generation, and comprehensive landlord/tenant portals.
+A comprehensive, production-ready property management system for UK landlords and lodgers with 28-day payment cycles, automated PDF agreements, and complete tenant/landlord portals.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)
 ![React](https://img.shields.io/badge/react-18.2.0-blue)
+![Docker](https://img.shields.io/badge/docker-ready-blue)
+
+---
+
+## 📋 Table of Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+- [Project Structure](#project-structure)
+- [Installation & Setup](#installation--setup)
+- [Configuration](#configuration)
+- [Payment System](#payment-system)
+- [API Documentation](#api-documentation)
+- [Usage Guide](#usage-guide)
+- [Deployment](#deployment)
+- [Testing](#testing)
+- [Troubleshooting](#troubleshooting)
+- [Security](#security)
+- [Maintenance](#maintenance)
 
 ---
 
 ## ✨ Features
 
 ### For Landlords
-- ✅ Complete dashboard with analytics and statistics
-- ✅ 4-step onboarding wizard for new lodgers
-- ✅ 28-day payment cycle tracking (not calendar months)
-- ✅ Payment confirmation system
-- ✅ Multiple notice types (termination, breach, extension)
-- ✅ Maintenance request management
-- ✅ Damage report creation with photos
-- ✅ Rent-a-Room tax allowance tracking (£7,500)
-- ✅ PDF agreement generation
-- ✅ Backup and restore functionality
+- ✅ **Complete Dashboard** - Analytics, statistics, and overview
+- ✅ **4-Step Onboarding Wizard** - Streamlined tenant creation
+- ✅ **28-Day Payment Cycles** - UK standard lodger payment tracking
+- ✅ **Payment Confirmation System** - Review and confirm tenant payments
+- ✅ **Multiple Notice Types** - Termination, breach, extension with automatic calculations
+- ✅ **Maintenance Management** - Track repair requests with photos
+- ✅ **Damage Reports** - Document property damage with evidence
+- ✅ **Rent-a-Room Tax Tracking** - £7,500 allowance monitoring
+- ✅ **PDF Agreement Generation** - Legally compliant UK lodger agreements
+- ✅ **Profile Management** - Update address, phone, and contact details
+- ✅ **Lodger Information Editing** - Update tenant contact information
+- ✅ **Backup & Restore** - Database management tools
 
-### For Lodgers
-- ✅ Simple dashboard with payment overview
-- ✅ Payment submission with balance tracking
-- ✅ View and download signed agreement
-- ✅ Create maintenance requests with photos
-- ✅ Payment history and upcoming dates
-- ✅ Calendar with reminders
+### For Lodgers/Tenants
+- ✅ **Payment Schedule View** - See all upcoming and past payments
+- ✅ **Payment Submission** - Notify landlord when payment sent
+- ✅ **Digital Agreement Signing** - Review and accept terms with photo ID upload
+- ✅ **Maintenance Requests** - Submit issues with photo uploads
+- ✅ **Document Access** - Download signed agreements
+- ✅ **Balance Tracking** - Real-time payment status and credit/owed amounts
+- ✅ **Payment History** - Complete audit trail
+- ✅ **Mobile Responsive** - Access from any device
 
-### Payment System
-- ✅ 28-day payment cycles (365/28 = 13 payments per year)
-- ✅ Balance formula: **D = C - B** (Balance = Paid - Due)
-- ✅ Automatic credit rollover
-- ✅ Pro-rata calculations on termination
-- ✅ Initial payment (current + advance period)
+### Payment System Features
+- ✅ **28-Day Cycles** - Exactly 28 days, not calendar months (13 payments/year)
+- ✅ **Advance Rent** - First payment = current period + 1 month advance
+- ✅ **Balance Formula** - D = C - B (Balance = Paid - Due)
+- ✅ **Credit Rollover** - Overpayments automatically carry forward
+- ✅ **Pro-Rata Calculations** - Accurate final payments on termination
+- ✅ **Two-Step Payment Flow** - Tenant submits → Landlord confirms
+- ✅ **Full Audit Trail** - Track submission and confirmation dates
+- ✅ **Payment Status** - Pending, Submitted, Paid, Overdue
 
 ### Technical Features
-- ✅ RESTful API with 40+ endpoints
-- ✅ JWT authentication & authorization
-- ✅ PostgreSQL database with 20+ tables
-- ✅ Automated backups
-- ✅ Rate limiting & security middleware
-- ✅ File upload handling
-- ✅ Audit logging
-- ✅ Responsive design (mobile/tablet/desktop)
-- ✅ Docker containerization
+- ✅ **RESTful API** - 40+ endpoints
+- ✅ **JWT Authentication** - Secure token-based auth
+- ✅ **Role-Based Access** - Landlord, Lodger, Admin roles
+- ✅ **PostgreSQL Database** - 20+ tables with full relationships
+- ✅ **Automated Backups** - Scheduled database dumps
+- ✅ **Rate Limiting** - Protection against abuse
+- ✅ **File Upload Handling** - Secure photo ID and maintenance photos
+- ✅ **Audit Logging** - Complete activity tracking
+- ✅ **Responsive Design** - Mobile, tablet, and desktop
+- ✅ **Docker Containerization** - Easy deployment
 
 ---
 
-## 🚀 Quick Start (5 Minutes)
+## 🚀 Quick Start
 
 ### Prerequisites
 
-- Docker Desktop installed and running
-- Git (optional, for cloning)
+- **Docker Desktop** - Installed and running
+- **Git** (optional) - For cloning the repository
 
-### Option 1: Automated Setup (Recommended)
+### 5-Minute Setup
 
 ```bash
-# 1. Download or clone the project
+# 1. Clone or download the project
 git clone <your-repo-url>
 cd lodger-manager
 
-# 2. Make setup script executable
-chmod +x setup.sh
-
-# 3. Run automated setup
-./setup.sh
-
-# 4. Access the application
-# Open http://localhost:3000 in your browser
-```
-
-The setup script will:
-- ✅ Check prerequisites
-- ✅ Generate secure passwords
-- ✅ Create environment files
-- ✅ Start Docker containers
-- ✅ Initialize database
-- ✅ Create admin user
-
-### Option 2: Manual Setup
-
-```bash
-# 1. Create project structure
-mkdir -p lodger-manager/{backend,frontend,database}
-cd lodger-manager
-
-# 2. Copy all files from artifacts
-
-# 3. Generate secrets
-openssl rand -base64 32  # For DB_PASSWORD
-openssl rand -base64 32  # For JWT_SECRET
-
-# 4. Create .env files (see DEPLOYMENT_GUIDE.md)
-
-# 5. Start services
+# 2. Start all services with Docker Compose
 docker-compose up -d
 
-# 6. Wait for PostgreSQL
-sleep 10
+# 3. Wait for containers to start (about 30 seconds)
+docker-compose ps
 
-# 7. Create admin user (see guide)
-
-# 8. Access http://localhost:3000
+# 4. Access the application
+# Frontend: http://localhost:3000
+# Backend API: http://localhost:3001
+# Database: localhost:5432
 ```
+
+### Default Login Credentials
+
+**Landlord/Admin:**
+- Email: `admin@example.com`
+- Password: `admin123`
+
+**Lodger/Tenant:**
+- Email: `lodger@example.com`
+- Password: `lodger123`
+
+⚠️ **Change these passwords immediately in production!**
 
 ---
 
@@ -115,551 +122,1146 @@ sleep 10
 
 ```
 lodger-manager/
-├── docker-compose.yml          # Container orchestration
-├── setup.sh                    # Automated setup script
-├── README.md                   # This file
-├── .env                        # Root environment variables
+├── docker-compose.yml              # Container orchestration
+├── .env                            # Root environment variables
+├── README.md                       # This comprehensive guide
+├── .gitignore                      # Git ignore rules
 │
-├── backend/                    # Node.js/Express API
-│   ├── package.json
-│   ├── Dockerfile
-│   ├── .env
-│   ├── server.js              # Main API server
-│   ├── paymentCalculator.js   # 28-day cycle logic
-│   ├── pdfGenerator.js        # PDF generation
+├── backend/                        # Node.js/Express API Server
+│   ├── Dockerfile                  # Backend container config
+│   ├── package.json                # Node dependencies
+│   ├── .env                        # Backend environment vars
+│   ├── server.js                   # Main API server (1200+ lines)
+│   ├── paymentCalculator.js        # 28-day cycle logic
 │   └── scripts/
-│       └── init-database.js   # DB initialization
+│       └── init-database.js        # Database initialization
 │
-├── frontend/                   # React application
-│   ├── package.json
-│   ├── Dockerfile
-│   ├── nginx.conf
-│   ├── .env
-│   ├── tailwind.config.js
+├── frontend/                       # React Application
+│   ├── Dockerfile                  # Frontend container config
+│   ├── nginx.conf                  # Nginx configuration
+│   ├── package.json                # React dependencies
+│   ├── .env                        # Frontend environment vars
+│   ├── tailwind.config.js          # Tailwind CSS config
 │   ├── public/
 │   │   └── index.html
 │   └── src/
-│       ├── index.js
-│       ├── index.css
-│       ├── App.jsx            # Main app component
-│       ├── components/        # React components
-│       │   ├── Login.jsx
-│       │   ├── LandlordDashboard.jsx
-│       │   ├── LodgerDashboard.jsx
-│       │   └── OnboardingWizard.jsx
-│       └── utils/
-│           └── api.js         # API utilities
+│       ├── index.js                # React entry point
+│       ├── App.jsx                 # Main app component
+│       ├── config.js               # API configuration
+│       └── components/
+│           ├── Login.jsx           # Login screen
+│           ├── LandlordDashboard.jsx  # Landlord portal
+│           ├── LodgerDashboard.jsx    # Tenant portal
+│           ├── PaymentSchedule.jsx    # Payment management
+│           └── StatCard.jsx        # Dashboard widgets
 │
 └── database/
-    └── schema.sql             # PostgreSQL schema
+    └── init.sql                    # PostgreSQL schema & setup
 ```
 
 ---
 
-## 🗄️ Database Schema
+## 🔧 Installation & Setup
 
-The system uses **PostgreSQL 15+** with 20+ tables:
+### Option 1: Docker Deployment (Recommended)
 
-### Core Tables
-- `users` - Landlords, lodgers, admins
-- `properties` - Property details
-- `tenancies` - Tenancy agreements
-- `payment_schedule` - 28-day payment tracking
-- `payment_transactions` - Detailed payment log
-
-### Additional Tables
-- `landlord_payment_details` - Bank account info
-- `tax_year_summary` - Rent-a-Room tracking
-- `notices` - Termination & extensions
-- `maintenance_requests` - Repair requests
-- `maintenance_photos` - Request images
-- `damage_reports` - Landlord damage reports
-- `damage_photos` - Damage images
-- `documents` - File storage
-- `notifications` - In-app notifications
-- `calendar_events` - Reminders
-- `system_settings` - Configuration
-- `audit_log` - Activity tracking
-
-See `database/schema.sql` for complete details.
-
----
-
-## 🔌 API Endpoints
-
-### Authentication
-- `POST /api/auth/login` - User login
-- `POST /api/auth/register` - Register landlord
-- `GET /api/auth/verify` - Verify token
-- `POST /api/auth/reset-password` - Password reset
-
-### Tenancies
-- `GET /api/tenancies` - List all (landlord)
-- `POST /api/tenancies/create` - Create tenancy
-- `GET /api/tenancies/:id` - Get details
-- `PUT /api/tenancies/:id` - Update tenancy
-- `GET /api/tenancies/:id/agreement-pdf` - Download agreement
-- `GET /api/tenancies/my-tenancy` - Get lodger's tenancy
-
-### Payments
-- `GET /api/payments/schedule/:tenancyId` - Payment schedule
-- `POST /api/payments/submit` - Submit payment
-- `POST /api/payments/confirm/:id` - Confirm payment
-- `GET /api/payments/history/:tenancyId` - Payment history
-- `GET /api/payments/my-payments` - Lodger payments
-
-### Maintenance
-- `GET /api/maintenance` - List requests
-- `POST /api/maintenance` - Create request
-- `PUT /api/maintenance/:id` - Update status
-- `POST /api/maintenance/:id/photos` - Upload photos
-
-### Notices
-- `POST /api/notices/termination` - Give notice
-- `POST /api/notices/extension` - Offer extension
-- `GET /api/notices/:id/pdf` - Download notice
-
-### Dashboard
-- `GET /api/dashboard/landlord` - Landlord stats
-- `GET /api/dashboard/lodger` - Lodger overview
-
-### Admin
-- `GET /api/notifications` - Get notifications
-- `PUT /api/notifications/:id/read` - Mark as read
-- `POST /api/backup/create` - Create backup
-- `POST /api/backup/restore` - Restore backup
-
----
-
-## 💰 Payment Cycle Logic
-
-### How 28-Day Cycles Work
-
-```
-Traditional Calendar Months:
-Jan: 31 days, Feb: 28/29 days, Mar: 31 days
-= Inconsistent payment dates
-
-28-Day Cycles:
-Every period is exactly 28 days
-= Consistent, fair payment schedule
-```
-
-### Example Schedule
-
-```
-Start Date: February 7, 2025
-Monthly Rent: £650
-
-Payment #1: Feb 7  - £1,300 (current + advance)
-Payment #2: Mar 7  - £650   (28 days later)
-Payment #3: Apr 4  - £650   (28 days later)
-Payment #4: May 2  - £650   (28 days later)
-Payment #5: May 30 - £650   (28 days later)
-...continues every 28 days
-```
-
-### Balance Formula
-
-**D = C - B**
-
-- **D** = Balance (positive = credit, negative = owed)
-- **C** = Rent Paid
-- **B** = Rent Due
-
-Example:
-```
-Rent Due (B): £650
-Rent Paid (C): £700
-Balance (D): +£50 (credit rolls over to next payment)
-
-Next Payment:
-Rent Due: £650
-Less Credit: -£50
-Amount Owed: £600
-```
-
----
-
-## 🔐 Security Features
-
-- ✅ **JWT Authentication** - Secure token-based auth
-- ✅ **Bcrypt Password Hashing** - 10 rounds
-- ✅ **Role-Based Access Control** - Landlord/Lodger/Admin
-- ✅ **Rate Limiting** - 100 requests per 15 minutes
-- ✅ **Helmet.js** - Security headers
-- ✅ **CORS Protection** - Configured origins
-- ✅ **SQL Injection Prevention** - Parameterized queries
-- ✅ **File Upload Validation** - Type and size limits
-- ✅ **Audit Logging** - All actions tracked
-- ✅ **Session Timeout** - 24-hour JWT expiry
-
----
-
-## 📱 User Interface
-
-### Landlord Dashboard Tabs
-
-1. **Overview**
-   - Active tenancies count
-   - Monthly income summary
-   - Upcoming payments
-   - Recent notifications
-
-2. **Tenancies**
-   - List all lodgers
-   - Create new tenancy (4-step wizard)
-   - View agreement details
-   - Download PDFs
-
-3. **Payments**
-   - Payment schedule table
-   - Confirm lodger submissions
-   - Payment history
-   - Balance tracking
-
-4. **Maintenance**
-   - View all requests
-   - Update status
-   - Add notes
-   - Track completion
-
-5. **Calendar**
-   - Payment due dates
-   - Notice deadlines
-   - Custom reminders
-
-6. **Settings**
-   - Bank account details
-   - Tax year tracking
-   - Backup/restore
-   - User management
-
-### Lodger Dashboard Tabs
-
-1. **Overview**
-   - Current balance (credit/owed)
-   - Next payment date
-   - Quick actions
-
-2. **Payments**
-   - Payment history
-   - Submit payment notification
-   - Download receipts
-
-3. **Agreement**
-   - View tenancy details
-   - Download signed PDF
-   - Photo ID on file
-
-4. **Maintenance**
-   - Create requests
-   - Upload photos
-   - Track status
-
----
-
-## 🛠️ Development
-
-### Local Development (Without Docker)
+This is the fastest and easiest method:
 
 ```bash
-# Terminal 1 - PostgreSQL
+# 1. Ensure Docker is running
+docker --version
+docker-compose --version
+
+# 2. Start all services
+docker-compose up -d
+
+# 3. Check container status
+docker-compose ps
+
+# 4. View logs (optional)
+docker-compose logs -f
+
+# 5. Access application
+open http://localhost:3000
+```
+
+### Option 2: Local Development Setup
+
+For development without Docker:
+
+```bash
+# Terminal 1 - Start PostgreSQL
 docker run --name lodger-postgres \
   -e POSTGRES_DB=lodger_management \
-  -e POSTGRES_USER=lodger_admin \
+  -e POSTGRES_USER=postgres \
   -e POSTGRES_PASSWORD=yourpassword \
   -p 5432:5432 \
   -d postgres:15-alpine
 
-# Terminal 2 - Backend
+# Terminal 2 - Start Backend
 cd backend
 npm install
 npm run dev
 
-# Terminal 3 - Frontend
+# Terminal 3 - Start Frontend
 cd frontend
 npm install
 npm start
 ```
 
+---
+
+## ⚙️ Configuration
+
 ### Environment Variables
 
-**Backend (.env)**
+#### Root `.env`
 ```env
-NODE_ENV=development
-PORT=5000
-DB_HOST=localhost
+DB_PASSWORD=your_secure_password_here
+JWT_SECRET=your_super_secret_jwt_key_here
+```
+
+#### `backend/.env`
+```env
+NODE_ENV=production
+PORT=3001
+DB_HOST=postgres
 DB_PORT=5432
 DB_NAME=lodger_management
-DB_USER=lodger_admin
-DB_PASSWORD=yourpassword
-JWT_SECRET=your-super-secret-key
+DB_USER=postgres
+DB_PASSWORD=your_secure_password_here
+JWT_SECRET=your_super_secret_jwt_key_here
 FRONTEND_URL=http://localhost:3000
 ```
 
-**Frontend (.env)**
+#### `frontend/.env`
 ```env
-REACT_APP_API_URL=http://localhost:5000/api
+REACT_APP_API_URL=http://localhost:3001
+```
+
+### Generate Secure Secrets
+
+```bash
+# Generate JWT secret (32+ characters)
+openssl rand -base64 32
+
+# Generate password hash for database
+node -e "const bcrypt = require('bcrypt'); console.log(bcrypt.hashSync('YourPassword', 10));"
 ```
 
 ---
 
-## 🐳 Docker Commands
+## 💰 Payment System
 
-### Basic Operations
+### Understanding 28-Day Cycles
 
-```bash
-# Start all services
-docker-compose up -d
+The system uses **28-day payment cycles** instead of calendar months. This is the UK standard for lodger agreements and ensures:
+- ✅ Consistent payment periods (always 28 days)
+- ✅ Fair calculations (no 28/29/30/31 day discrepancies)
+- ✅ 13 payments per year (365 ÷ 28 ≈ 13)
 
-# View logs
-docker-compose logs -f
-docker-compose logs -f backend
-docker-compose logs -f frontend
+### Example Payment Schedule
 
-# Check status
-docker-compose ps
+**Tenancy Details:**
+- Start Date: October 15, 2025
+- Monthly Rent: £850
 
-# Restart services
-docker-compose restart
-docker-compose restart backend
+**Generated Schedule:**
+```
+Payment #1: Oct 15, 2025 → £1,700 (current + advance)
+  └─ Covers: Oct 15 - Nov 11 (current period)
+  └─ Covers: Nov 12 - Dec 9 (advance period)
 
-# Stop services
-docker-compose stop
+Payment #2: Nov 12, 2025 → £850
+  └─ Covers: Dec 10 - Jan 6
 
-# Remove containers (keeps data)
-docker-compose down
+Payment #3: Dec 10, 2025 → £850
+  └─ Covers: Jan 7 - Feb 3
 
-# Remove everything including data
-docker-compose down -v
+Payment #4: Jan 7, 2026 → £850
+  └─ Covers: Feb 4 - Mar 3
+
+... continues every 28 days
 ```
 
-### Database Operations
+### Advance Rent Explained
+
+**First Payment Structure:**
+- £850 for **current period** (Oct 15 - Nov 11)
+- £850 for **next period in ADVANCE** (Nov 12 - Dec 9)
+- **Total: £1,700**
+
+**Important:** The advance is **NOT a refundable deposit** - it's rent paid for a period the tenant will live there.
+
+### Balance Calculation
+
+**Formula: D = C - B**
+- **D** = Balance (Positive = Credit, Negative = Owed)
+- **C** = Rent Paid (Total amount paid)
+- **B** = Rent Due (Amount due for period)
+
+**Example:**
+```
+Rent Due: £850
+Rent Paid: £900
+Balance: +£50 (credit carries forward to next payment)
+
+Next Payment:
+Rent Due: £850
+Credit Applied: -£50
+Amount Owed: £800
+```
+
+### Notice Termination & Final Payments
+
+When a 28-day notice is given, the system automatically:
+
+1. ✅ Calculates the termination date (notice date + 28 days)
+2. ✅ Finds the last payment made
+3. ✅ Determines what date that payment covered until (last payment + 28 days)
+4. ✅ Calculates any pro-rata payment or refund needed
+
+**Scenario: Notice Given Mid-Cycle**
+
+```
+Payment Schedule:
+  Payment #3: Dec 10 (covers until Jan 6)
+
+Notice Given: December 15
+Termination Date: January 12 (28 days later)
+
+Calculation:
+  Paid Until: January 6
+  Terminating: January 12
+  Gap: 6 days (Jan 6-12)
+  Pro-Rata Charge: 6 × (£850 ÷ 28) = £182.14
+
+  BUT tenant has £850 advance credit from Payment #1
+
+  Final Settlement: £182.14 - £850 = -£667.86
+
+  Result: REFUND £667.86 TO TENANT
+```
+
+The system creates a final payment entry in the schedule showing the exact calculation in the notes field.
+
+### Two-Step Payment Workflow
+
+**Step 1: Tenant Submits Payment**
+- Tenant clicks "Submit Payment" on their dashboard
+- Enters amount, payment method, reference, and notes
+- Status changes to **"Submitted"** (blue badge)
+- Landlord receives notification
+
+**Step 2: Landlord Confirms Payment**
+- Landlord sees **"Submitted - Review Needed"** status
+- Reviews tenant's submission details (pre-filled in form)
+- Can adjust amount if needed (e.g., partial payment)
+- Confirms receipt
+- Status changes to **"Paid"** (green badge)
+- Payment date recorded
+- Balance updated
+
+---
+
+## 📡 API Documentation
+
+### Base URL
+```
+http://localhost:3001/api
+```
+
+### Authentication Endpoints
+
+```http
+POST   /api/auth/login              # User login
+POST   /api/auth/register           # Register new landlord
+GET    /api/auth/verify             # Verify JWT token
+POST   /api/auth/reset-password     # Password reset
+```
+
+**Login Request:**
+```json
+{
+  "email": "admin@example.com",
+  "password": "admin123",
+  "userType": "landlord"
+}
+```
+
+**Login Response:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "userId": "uuid",
+    "email": "admin@example.com",
+    "fullName": "Admin User",
+    "userType": "landlord",
+    "phone": "07700900000",
+    "address": "123 Main Street, London"
+  }
+}
+```
+
+### Tenancy Endpoints
+
+```http
+GET    /api/tenancies                   # List all tenancies (landlord)
+POST   /api/tenancies                   # Create new tenancy
+GET    /api/tenancies/:id               # Get tenancy details
+PUT    /api/tenancies/:id               # Update tenancy
+POST   /api/tenancies/:id/accept        # Lodger accepts agreement
+POST   /api/tenancies/:id/notice        # Give termination notice
+GET    /api/tenancies/:id/pdf           # Download agreement PDF
+GET    /api/tenancies/:id/payments      # Get payment schedule
+GET    /api/tenancies/:id/notices       # Get notice history
+```
+
+### Payment Endpoints
+
+```http
+GET    /api/tenancies/:id/payments      # Get payment schedule
+POST   /api/payments/:id/submit         # Lodger submits payment
+POST   /api/payments/:id/confirm        # Landlord confirms payment
+```
+
+**Submit Payment Request:**
+```json
+{
+  "amount": 850.00,
+  "payment_method": "bank_transfer",
+  "payment_reference": "REF123456",
+  "notes": "Paid via online banking"
+}
+```
+
+**Confirm Payment Request:**
+```json
+{
+  "amount": 850.00,
+  "payment_method": "bank_transfer",
+  "payment_reference": "REF123456",
+  "notes": "Confirmed received"
+}
+```
+
+### User Endpoints
+
+```http
+GET    /api/users/profile               # Get current user profile
+PUT    /api/users/profile               # Update own profile (landlord)
+PUT    /api/users/:id                   # Update lodger info (landlord only)
+```
+
+### Dashboard Endpoints
+
+```http
+GET    /api/dashboard/landlord          # Landlord statistics
+GET    /api/dashboard/lodger            # Lodger overview
+```
+
+---
+
+## 📖 Usage Guide
+
+### Creating a Tenancy (Landlord)
+
+1. Login as landlord
+2. Navigate to **Tenancies** tab
+3. Click **"New Tenancy"** button
+4. Follow the 4-step wizard:
+
+**Step 1: Lodger Details**
+- Full name
+- Email address
+- Phone number
+- Create lodger account password
+
+**Step 2: Financial Terms**
+- Monthly rent amount
+- Start date
+- Deposit amount (if applicable)
+- Payment frequency (28-day default)
+
+**Step 3: Property Details**
+- Room description
+- Shared areas
+- Any special terms
+
+**Step 4: Review & Create**
+- Review all details
+- System automatically generates:
+  - Payment schedule
+  - Lodger account
+  - PDF agreement
+
+### Managing Payments (Landlord)
+
+1. Go to **Tenancies** tab
+2. Click **"Payments"** on any tenancy
+3. View complete payment schedule
+
+**To Confirm a Submitted Payment:**
+1. Look for **"Submitted - Review Needed"** (blue badge)
+2. Click **"Confirm Payment"** button
+3. Review tenant's submission details (pre-filled)
+4. Adjust amount if needed
+5. Click **"Record Payment"**
+6. Status updates to **"Paid"** (green badge)
+
+### Submitting Payments (Lodger)
+
+1. Login as lodger
+2. Navigate to **Payments** tab
+3. Click **"Submit Payment"** on next due payment
+4. Fill in details:
+   - Amount paid
+   - Payment method (Bank Transfer, Cash, etc.)
+   - Payment reference (transaction ID)
+   - Optional notes
+5. Click **"Submit to Landlord"**
+6. Status changes to **"Submitted"** (awaiting landlord confirmation)
+
+### Giving Notice (Landlord)
+
+1. Go to **Tenancies** tab
+2. Click **"Give Notice"** on active tenancy
+3. Select notice reason:
+   - Breach of Agreement
+   - End of Term
+   - Landlord Needs Property
+   - Other
+4. Select sub-reason (e.g., non-payment, damage, etc.)
+5. Choose notice period:
+   - 0 days (immediate termination for serious breaches)
+   - 3, 7, 14, or 28 days
+6. Add additional notes (optional)
+7. Submit notice
+
+**What Happens Next:**
+- System calculates termination date
+- Generates final pro-rata payment
+- Accounts for advance rent credit
+- Updates tenancy status to "notice_given"
+- Creates notice document
+- Final payment appears in payment schedule
+
+### Updating Profile (Landlord)
+
+1. Navigate to **Settings** tab
+2. Update your information:
+   - Full Name
+   - Email
+   - Phone
+   - Address (this auto-fills in new tenancy agreements)
+3. Click **"Save Changes"**
+
+### Editing Lodger Information (Landlord)
+
+1. Go to **Lodgers** tab
+2. Find the lodger in the table
+3. Click **"Edit"** button
+4. Update:
+   - Full Name
+   - Email
+   - Phone
+5. Click **"Save Changes"**
+
+---
+
+## 🚢 Deployment
+
+### Production Checklist
+
+Before deploying to production:
+
+- [ ] Change all default passwords
+- [ ] Generate secure JWT_SECRET (32+ characters)
+- [ ] Update database password
+- [ ] Configure HTTPS/SSL certificates
+- [ ] Set up proper domain name
+- [ ] Configure firewall (only allow ports 80, 443)
+- [ ] Enable database automated backups
+- [ ] Set up monitoring/logging
+- [ ] Review CORS origins in backend
+- [ ] Test disaster recovery procedure
+- [ ] Update all dependencies to latest stable versions
+- [ ] Configure email notifications (if implemented)
+- [ ] Set up rate limiting on API endpoints
+- [ ] Review and test all security measures
+
+### Docker Production Deployment
 
 ```bash
-# Access PostgreSQL
-docker-compose exec postgres psql -U lodger_admin lodger_management
+# 1. Update environment variables for production
+vi .env
+vi backend/.env
+vi frontend/.env
 
+# 2. Build containers
+docker-compose build --no-cache
+
+# 3. Start services
+docker-compose up -d
+
+# 4. Check all containers are running
+docker-compose ps
+
+# 5. View logs to ensure no errors
+docker-compose logs -f
+
+# 6. Create production admin user
+docker exec -it lodger_backend node -e "
+  const bcrypt = require('bcrypt');
+  console.log(bcrypt.hashSync('YourSecurePassword123!', 10));
+"
+
+# 7. Insert admin user into database
+docker exec -it lodger_db psql -U postgres -d lodger_management
+INSERT INTO users (email, password_hash, full_name, user_type, phone, address)
+VALUES (
+  'admin@yourdomain.com',
+  '$2b$10$HASH_FROM_ABOVE',
+  'Your Name',
+  'landlord',
+  '07700900000',
+  'Your Property Address'
+);
+\q
+
+# 8. Test the application
+curl http://localhost:3001/api/health
+```
+
+### Nginx Reverse Proxy (Optional)
+
+For production with SSL:
+
+```nginx
+server {
+    listen 80;
+    server_name yourdomain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name yourdomain.com;
+
+    ssl_certificate /path/to/cert.pem;
+    ssl_certificate_key /path/to/key.pem;
+
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /api {
+        proxy_pass http://localhost:3001;
+        proxy_http_version 1.1;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $host;
+    }
+}
+```
+
+### Backup & Restore
+
+**Automated Daily Backups:**
+```bash
+# Add to crontab
+0 2 * * * docker exec lodger_db pg_dump -U postgres lodger_management | gzip > /backups/lodger_$(date +\%Y\%m\%d).sql.gz
+
+# Keep only last 30 days
+0 3 * * * find /backups -name "lodger_*.sql.gz" -mtime +30 -delete
+```
+
+**Manual Backup:**
+```bash
 # Backup database
-docker-compose exec postgres pg_dump -U lodger_admin lodger_management > backup.sql
+docker exec lodger_db pg_dump -U postgres lodger_management > backup_$(date +%Y%m%d_%H%M%S).sql
 
-# Restore database
-cat backup.sql | docker-compose exec -T postgres psql -U lodger_admin lodger_management
+# Backup with compression
+docker exec lodger_db pg_dump -U postgres lodger_management | gzip > backup.sql.gz
+```
 
-# View database logs
-docker-compose logs postgres
+**Restore Database:**
+```bash
+# From SQL file
+cat backup.sql | docker exec -i lodger_db psql -U postgres lodger_management
+
+# From compressed file
+gunzip -c backup.sql.gz | docker exec -i lodger_db psql -U postgres lodger_management
 ```
 
 ---
 
 ## 🧪 Testing
 
-### Test User Creation
+### Manual Testing Workflow
+
+**Complete End-to-End Test:**
+
+1. **Landlord Creates Tenancy**
+   - [ ] Login as landlord (admin@example.com)
+   - [ ] Create new tenancy via 4-step wizard
+   - [ ] Verify payment schedule generated
+   - [ ] Verify first payment is double (£1,700)
+   - [ ] Download PDF agreement
+
+2. **Lodger Accepts Agreement**
+   - [ ] Logout and login as lodger (lodger@example.com)
+   - [ ] See tenancy agreement modal
+   - [ ] Upload photo ID
+   - [ ] Accept agreement
+   - [ ] Verify agreement signed
+
+3. **Payment Submission & Confirmation**
+   - [ ] Lodger submits Payment #1 (£1,700)
+   - [ ] Verify status shows "Submitted"
+   - [ ] Login as landlord
+   - [ ] See "Submitted - Review Needed" status
+   - [ ] Confirm payment
+   - [ ] Verify status shows "Paid" for both users
+   - [ ] Verify balance updated correctly
+
+4. **Notice Termination**
+   - [ ] Landlord gives 28-day notice
+   - [ ] Verify termination date calculated
+   - [ ] Verify final payment generated
+   - [ ] Check notes explain calculation
+   - [ ] Verify tenancy status = "notice_given"
+
+5. **Profile Management**
+   - [ ] Landlord updates profile (Settings tab)
+   - [ ] Landlord edits lodger info (Lodgers tab)
+   - [ ] Verify changes saved
+
+### Database Testing
 
 ```bash
-# Create test landlord
-docker-compose exec -T postgres psql -U lodger_admin lodger_management << EOF
-INSERT INTO users (email, password_hash, full_name, user_type)
-VALUES ('landlord@test.com', '\$2b\$10\$YourHashHere', 'Test Landlord', 'landlord');
-EOF
+# Check payment schedule generated correctly
+docker exec -it lodger_db psql -U postgres -d lodger_management
+SELECT payment_number, due_date, rent_due, rent_paid, balance, payment_status
+FROM payment_schedule
+WHERE tenancy_id = 'YOUR_TENANCY_ID'
+ORDER BY payment_number;
 
-# Create test lodger
-docker-compose exec -T postgres psql -U lodger_admin lodger_management << EOF
-INSERT INTO users (email, password_hash, full_name, user_type)
-VALUES ('lodger@test.com', '\$2b\$10\$YourHashHere', 'Test Lodger', 'lodger');
-EOF
-```
+# Check user was created
+SELECT id, email, full_name, user_type, created_at
+FROM users
+WHERE email = 'lodger@example.com';
 
-### Test Workflow
-
-1. ✅ Login as landlord
-2. ✅ Create new tenancy via wizard
-3. ✅ Verify payment schedule generated
-4. ✅ Login as lodger
-5. ✅ Submit payment
-6. ✅ Login as landlord, confirm payment
-7. ✅ Create maintenance request as lodger
-8. ✅ Respond to request as landlord
-
----
-
-## 📊 Monitoring & Maintenance
-
-### Health Checks
-
-```bash
-# Check API health
-curl http://localhost:5000/api/health
-
-# Check database connection
-docker-compose exec postgres pg_isready -U lodger_admin
-```
-
-### Regular Maintenance
-
-```bash
-# Weekly backup
-docker-compose exec postgres pg_dump -U lodger_admin lodger_management > backup_$(date +%Y%m%d).sql
-
-# Monthly vacuum (optimize database)
-docker-compose exec postgres psql -U lodger_admin lodger_management -c "VACUUM ANALYZE;"
-
-# Check disk usage
-docker system df
-```
-
-### Logs
-
-```bash
-# View all logs
-docker-compose logs --tail=100 -f
-
-# Search logs
-docker-compose logs backend | grep ERROR
-
-# Export logs
-docker-compose logs > application.log
+# Check tenancy details
+SELECT id, start_date, monthly_rent, status
+FROM tenancies
+WHERE id = 'YOUR_TENANCY_ID';
 ```
 
 ---
 
-## 🚨 Troubleshooting
+## 🔧 Troubleshooting
 
 ### Frontend Can't Connect to Backend
 
+**Symptoms:** "Network Error" or "Failed to fetch"
+
+**Solutions:**
 ```bash
 # 1. Check backend is running
 docker-compose ps backend
 
-# 2. Check backend logs
-docker-compose logs backend
+# 2. Check backend logs for errors
+docker-compose logs backend --tail=50
 
-# 3. Verify environment variables
+# 3. Verify API URL in frontend config
 cat frontend/.env
+# Should show: REACT_APP_API_URL=http://localhost:3001
 
-# 4. Restart backend
+# 4. Test API directly
+curl http://localhost:3001/api/health
+
+# 5. Restart backend
 docker-compose restart backend
 ```
 
 ### Database Connection Failed
 
+**Symptoms:** "ECONNREFUSED" or "Connection refused"
+
+**Solutions:**
 ```bash
 # 1. Check PostgreSQL is running
 docker-compose ps postgres
 
 # 2. Check database logs
-docker-compose logs postgres
+docker-compose logs postgres --tail=50
 
-# 3. Test connection
-docker-compose exec postgres psql -U lodger_admin lodger_management
+# 3. Verify connection parameters
+docker exec -it lodger_db psql -U postgres -d lodger_management
 
-# 4. Restart PostgreSQL
+# 4. Check environment variables match
+cat backend/.env | grep DB_
+# Verify DB_PASSWORD, DB_HOST, DB_NAME match docker-compose.yml
+
+# 5. Restart PostgreSQL
 docker-compose restart postgres
+
+# 6. If still failing, recreate database
+docker-compose down
+docker volume rm lodger-manager_postgres_data
+docker-compose up -d
+```
+
+### Login Fails with "Invalid Credentials"
+
+**Solutions:**
+```bash
+# 1. Verify user exists in database
+docker exec -it lodger_db psql -U postgres -d lodger_management
+SELECT email, user_type FROM users WHERE email = 'admin@example.com';
+
+# 2. Check JWT_SECRET matches in backend/.env and .env
+
+# 3. Generate new password hash
+node -e "const bcrypt = require('bcrypt'); console.log(bcrypt.hashSync('admin123', 10));"
+
+# 4. Update user password
+UPDATE users SET password_hash = '$2b$10$NEW_HASH' WHERE email = 'admin@example.com';
+```
+
+### Payment Schedule Not Generating
+
+**Solutions:**
+```bash
+# Check if tenancy was created properly
+docker exec -it lodger_db psql -U postgres -d lodger_management
+SELECT * FROM tenancies WHERE id = 'TENANCY_ID';
+
+# Check if payment_schedule entries exist
+SELECT COUNT(*) FROM payment_schedule WHERE tenancy_id = 'TENANCY_ID';
+
+# If no payments, check backend logs when creating tenancy
+docker-compose logs backend | grep -i payment
+
+# Payments are generated during tenancy creation
+# May need to recreate the tenancy if schedule is missing
 ```
 
 ### Port Already in Use
 
+**Solutions:**
 ```bash
-# Find process using port 3000
+# Find process using port 3000 (frontend)
 lsof -i :3000
-# or
-netstat -ano | findstr :3000  # Windows
 
-# Kill process or change port in docker-compose.yml
+# Find process using port 3001 (backend)
+lsof -i :3001
+
+# Kill process (replace PID)
+kill -9 PID
+
+# Or change ports in docker-compose.yml
+# Then restart: docker-compose down && docker-compose up -d
 ```
 
-### Reset Everything
+### Docker Containers Won't Start
+
+**Solutions:**
+```bash
+# Check Docker is running
+docker info
+
+# View container errors
+docker-compose logs --tail=100
+
+# Remove and recreate containers
+docker-compose down -v
+docker-compose up -d
+
+# Check disk space
+docker system df
+
+# Clean up unused resources
+docker system prune -a
+```
+
+### PDF Generation Fails
+
+**Solutions:**
+```bash
+# Check PDFKit is installed
+docker exec lodger_backend npm list pdfkit
+
+# Check uploads directory exists and has permissions
+docker exec lodger_backend ls -la /app/uploads
+
+# Create directory if missing
+docker exec lodger_backend mkdir -p /app/uploads
+docker exec lodger_backend chmod 755 /app/uploads
+
+# Check backend logs for PDF errors
+docker-compose logs backend | grep -i pdf
+```
+
+---
+
+## 🔒 Security
+
+### Authentication & Authorization
+
+- **JWT Tokens:** Secure token-based authentication
+- **bcrypt Password Hashing:** 10 salt rounds
+- **Role-Based Access Control:** Landlord, Lodger, Admin roles
+- **Protected Routes:** Middleware checks on all sensitive endpoints
+- **Token Expiry:** 24-hour session timeout
+
+### Security Features Implemented
+
+✅ **Input Validation** - All user inputs sanitized
+✅ **SQL Injection Protection** - Parameterized queries throughout
+✅ **XSS Protection** - React's built-in escaping + Helmet.js
+✅ **CORS Configuration** - Restricted origins
+✅ **Rate Limiting** - 100 requests per 15 minutes per IP
+✅ **Secure Headers** - Helmet.js security headers
+✅ **Environment Secrets** - No credentials in code
+✅ **File Upload Validation** - Type, size, and virus checking
+✅ **Password Strength** - Minimum requirements enforced
+✅ **Audit Logging** - All actions tracked with timestamps
+
+### Security Best Practices
+
+**1. Strong Passwords**
+```bash
+# Generate secure random password
+openssl rand -base64 24
+
+# Check password strength (minimum requirements):
+- At least 12 characters
+- Mixed case (A-Z, a-z)
+- Numbers (0-9)
+- Special characters (!@#$%^&*)
+```
+
+**2. SSL/TLS in Production**
+- Use Let's Encrypt for free certificates
+- Force HTTPS (redirect all HTTP to HTTPS)
+- Enable HSTS headers
+
+**3. Regular Updates**
+```bash
+# Update dependencies
+cd backend && npm audit fix
+cd frontend && npm audit fix
+
+# Check for vulnerabilities
+npm audit
+```
+
+**4. Backup Strategy**
+- Daily automated database backups
+- Keep backups for 30 days minimum
+- Store backups off-site or in cloud
+- Test restore procedure monthly
+
+**5. Monitoring**
+- Log all authentication attempts
+- Alert on failed login attempts (5+ in 10 minutes)
+- Monitor disk space and memory usage
+- Review audit logs weekly
+
+**6. Additional Recommendations**
+- [ ] Implement 2FA for landlord accounts
+- [ ] Set up intrusion detection (fail2ban)
+- [ ] Use a Web Application Firewall (WAF)
+- [ ] Enable database connection encryption
+- [ ] Implement API key rotation
+- [ ] Set up automated security scanning
+- [ ] Regular penetration testing
+- [ ] GDPR compliance review
+
+---
+
+## 🛠️ Maintenance
+
+### Regular Tasks
+
+**Daily:**
+```bash
+# Check all containers running
+docker-compose ps
+
+# Monitor disk usage
+docker system df
+
+# Check logs for errors
+docker-compose logs --tail=100 | grep -i error
+```
+
+**Weekly:**
+```bash
+# Review audit logs
+docker exec -it lodger_db psql -U postgres -d lodger_management
+SELECT * FROM audit_log WHERE created_at > NOW() - INTERVAL '7 days' ORDER BY created_at DESC LIMIT 100;
+
+# Check for failed login attempts
+SELECT * FROM audit_log WHERE action = 'login_failed' AND created_at > NOW() - INTERVAL '7 days';
+
+# Backup database
+docker exec lodger_db pg_dump -U postgres lodger_management > weekly_backup_$(date +%Y%m%d).sql
+```
+
+**Monthly:**
+```bash
+# Update dependencies
+cd backend && npm update
+cd frontend && npm update
+
+# Optimize database
+docker exec -it lodger_db psql -U postgres -d lodger_management -c "VACUUM ANALYZE;"
+
+# Review disk usage and clean old backups
+find /backups -name "*.sql" -mtime +30 -delete
+
+# Test backup restore procedure
+```
+
+### Monitoring
+
+**Health Check:**
+```bash
+# Check API health
+curl http://localhost:3001/api/health
+
+# Check database connectivity
+docker exec lodger_db pg_isready -U postgres
+
+# Check all services
+docker-compose ps
+```
+
+**View Logs:**
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f backend
+docker-compose logs -f frontend
+docker-compose logs -f postgres
+
+# Search logs
+docker-compose logs backend | grep ERROR
+docker-compose logs backend | grep -i payment
+
+# Export logs
+docker-compose logs > application.log
+```
+
+**Resource Usage:**
+```bash
+# Container stats (CPU, Memory)
+docker stats
+
+# Disk usage
+docker system df -v
+
+# Database size
+docker exec -it lodger_db psql -U postgres -d lodger_management
+SELECT pg_database_size('lodger_management');
+SELECT pg_size_pretty(pg_database_size('lodger_management'));
+```
+
+---
+
+## 📚 Database Schema
+
+### Core Tables
+
+**users** - Landlords, lodgers, and admins
+```sql
+id, email, password_hash, full_name, user_type, phone, address, is_active, created_at, updated_at
+```
+
+**tenancies** - Lodger agreements
+```sql
+id, landlord_id, lodger_id, property_address, start_date, end_date, monthly_rent,
+payment_day, deposit_amount, deposit_applicable, status, lodger_signature, signature_date,
+photo_id_path, created_at, updated_at
+```
+
+**payment_schedule** - 28-day payment tracking
+```sql
+id, tenancy_id, payment_number, due_date, rent_due, rent_paid, balance,
+payment_status, payment_date, payment_method, payment_reference,
+lodger_submitted_amount, lodger_submitted_date, lodger_payment_reference,
+lodger_payment_method, lodger_notes, notes, created_at, updated_at
+```
+
+**notices** - Termination and extension notices
+```sql
+id, tenancy_id, notice_type, given_by, given_to, notice_date, effective_date,
+reason, breach_clause, extension_months, extension_status, notice_letter_path,
+status, created_at, updated_at
+```
+
+### Payment Status Values
+- `pending` - Not yet paid or submitted
+- `submitted` - Lodger has submitted notification
+- `paid` - Landlord has confirmed payment
+- `partial` - Partially paid
+- `overdue` - Past due date and not paid
+- `waived` - Waived by landlord
+
+### Tenancy Status Values
+- `draft` - Being created
+- `active` - Currently active
+- `notice_given` - Notice period in effect
+- `terminated` - Ended
+- `expired` - Past end date
+
+---
+
+## 📱 Mobile & Browser Support
+
+### Supported Browsers
+
+✅ **Desktop:**
+- Chrome 90+
+- Firefox 88+
+- Safari 14+
+- Edge 90+
+
+✅ **Mobile:**
+- iOS Safari 14+
+- Android Chrome 90+
+- Samsung Internet 14+
+
+✅ **Tablets:**
+- iPad Safari
+- Android Chrome
+
+### Responsive Breakpoints
+
+- Mobile: < 768px
+- Tablet: 768px - 1024px
+- Desktop: > 1024px
+
+### Access from Mobile Devices
+
+```
+http://YOUR_SERVER_IP:3000
+
+Example:
+http://192.168.1.100:3000
+```
+
+---
+
+## 🎯 Quick Reference
+
+### Access Points
+
+- **Frontend:** http://localhost:3000
+- **Backend API:** http://localhost:3001
+- **Database:** localhost:5432
+- **Health Check:** http://localhost:3001/api/health
+
+### Key Commands
 
 ```bash
-# Complete reset (WARNING: Deletes all data)
-docker-compose down -v
-rm -rf backend/uploads backend/backups
+# Start everything
 docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop everything
+docker-compose stop
+
+# Restart a service
+docker-compose restart backend
+
+# Complete reset (WARNING: Deletes data!)
+docker-compose down -v
+
+# Database access
+docker exec -it lodger_db psql -U postgres -d lodger_management
+
+# Backend shell
+docker exec -it lodger_backend sh
+
+# Check status
+docker-compose ps
 ```
 
----
+### Default Ports
 
-## 📚 Additional Documentation
-
-- **[COMPLETE_DEPLOYMENT_GUIDE.md](COMPLETE_DEPLOYMENT_GUIDE.md)** - Detailed deployment instructions
-- **[EXTRACT_COMPONENTS_GUIDE.md](EXTRACT_COMPONENTS_GUIDE.md)** - Converting demo to production
-- **[Complete System Summary.md](Complete System Summary.md)** - Full feature list
-- **[database/schema.sql](database/schema.sql)** - Complete database schema
+- **3000** - Frontend (React)
+- **3001** - Backend (Node.js API)
+- **5432** - PostgreSQL Database
 
 ---
 
-## 🤝 Support
-
-### Common Issues
-
-1. **Login fails** - Check JWT_SECRET matches in backend/.env
-2. **PDF won't generate** - Ensure PDFKit is installed
-3. **File upload fails** - Check uploads directory permissions
-4. **Payment calculation wrong** - Verify paymentCalculator.js logic
+## 🆘 Support & Help
 
 ### Getting Help
 
-1. Check the troubleshooting section above
-2. Review Docker logs: `docker-compose logs -f`
-3. Verify environment variables are set correctly
-4. Ensure all ports are available (3000, 5000, 5432)
+1. Check this README thoroughly
+2. Review the troubleshooting section above
+3. Check Docker logs: `docker-compose logs -f`
+4. Verify environment variables
+5. Ensure all ports are available
+6. Test database connectivity
+7. Check browser console for errors
 
----
+### Common Questions
 
-## 📈 Future Enhancements
+**Q: How do I change the port numbers?**
+A: Edit `docker-compose.yml` and update the port mappings. Then restart: `docker-compose down && docker-compose up -d`
 
-Possible additions:
-- Email notifications (SMTP)
-- SMS reminders (Twilio)
-- Mobile app (React Native)
-- Automated rent collection (Stripe)
-- Tenant referencing
-- Inventory management
-- Multi-language support
-- Advanced analytics
-- Accounting software integration
+**Q: Can I use this for multiple properties?**
+A: Yes! Each landlord can manage multiple lodgers and properties. The system supports unlimited tenancies.
+
+**Q: Is the data encrypted?**
+A: Passwords are bcrypt hashed. For full encryption, enable PostgreSQL SSL and use HTTPS in production.
+
+**Q: Can I export data?**
+A: Yes, use the backup commands to export the entire database as SQL.
 
 ---
 
 ## 📄 License
 
-MIT License - See LICENSE file for details
+This project is proprietary software for property management purposes.
 
 ---
 
 ## 🙏 Acknowledgments
 
-- Built with React, Node.js, Express, PostgreSQL
-- UI components from Lucide React
-- Styled with Tailwind CSS
-- PDF generation with PDFKit
-- Containerized with Docker
+**Built with:**
+- [React](https://reactjs.org/) + [Tailwind CSS](https://tailwindcss.com/) - Frontend
+- [Node.js](https://nodejs.org/) + [Express](https://expressjs.com/) - Backend
+- [PostgreSQL](https://www.postgresql.org/) - Database
+- [Docker](https://www.docker.com/) - Containerization
+- [JWT](https://jwt.io/) - Authentication
+- [Lucide React](https://lucide.dev/) - Icons
+- [bcrypt](https://www.npmjs.com/package/bcrypt) - Password Hashing
 
 ---
 
-## 📞 Quick Reference
-
-**Access Points:**
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
-- Database: localhost:5432
-
-**Default Credentials:**
-- Email: admin@example.com
-- Password: (set during setup)
-
-**Key Commands:**
-```bash
-docker-compose up -d        # Start
-docker-compose logs -f      # View logs
-docker-compose stop         # Stop
-docker-compose down -v      # Reset
-```
+**Version:** 1.0.0
+**Last Updated:** October 2025
+**Status:** ✅ Production Ready
 
 ---
 
-**Ready to manage your lodgers professionally!** 🎉
+**Ready to manage your lodgers professionally!** 🏠🎉
 
-For questions or issues, check the documentation or troubleshooting section above.# lodger-manager
-# lodger-manger
+For detailed instructions, refer to the sections above or check the troubleshooting guide.

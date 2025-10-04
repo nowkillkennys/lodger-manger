@@ -15,6 +15,14 @@ const LodgerDashboard = ({ user, onLogout }) => {
   const [photoIdFile, setPhotoIdFile] = useState(null);
   const [photoIdPreview, setPhotoIdPreview] = useState(null);
   const [uploadingAgreement, setUploadingAgreement] = useState(false);
+  const [showSubmitPayment, setShowSubmitPayment] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState(null);
+  const [paymentSubmitForm, setPaymentSubmitForm] = useState({
+    amount: '',
+    payment_method: 'bank_transfer',
+    payment_reference: '',
+    notes: ''
+  });
 
   useEffect(() => {
     fetchLodgerData();
@@ -27,7 +35,6 @@ const LodgerDashboard = ({ user, onLogout }) => {
 
       const responses = await Promise.allSettled([
         axios.get(`${API_URL}/api/tenancies`, config),
-        axios.get(`${API_URL}/api/payments/my-payments`, config),
         axios.get(`${API_URL}/api/dashboard/lodger`, config)
       ]);
 
@@ -41,14 +48,16 @@ const LodgerDashboard = ({ user, onLogout }) => {
         if (currentTenancy && !currentTenancy.lodger_signature) {
           setShowAgreementModal(true);
         }
+
+        // Fetch payment schedule for the tenancy
+        if (currentTenancy) {
+          const paymentResponse = await axios.get(`${API_URL}/api/tenancies/${currentTenancy.id}/payments`, config);
+          setPayments(paymentResponse.data);
+        }
       }
 
       if (responses[1].status === 'fulfilled') {
-        setPayments(responses[1].value.data);
-      }
-
-      if (responses[2].status === 'fulfilled') {
-        const dashData = responses[2].value.data;
+        const dashData = responses[1].value.data;
         setBalance(dashData.currentBalance || 0);
         setNextPayment(dashData.nextPayment || null);
       }
@@ -105,6 +114,34 @@ const LodgerDashboard = ({ user, onLogout }) => {
       alert(error.response?.data?.error || 'Failed to accept agreement');
     } finally {
       setUploadingAgreement(false);
+    }
+  };
+
+  const handleSubmitPayment = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${API_URL}/api/payments/${selectedPayment.id}/submit`, {
+        amount: parseFloat(paymentSubmitForm.amount),
+        payment_reference: paymentSubmitForm.payment_reference,
+        payment_method: paymentSubmitForm.payment_method,
+        notes: paymentSubmitForm.notes
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setShowSubmitPayment(false);
+      setSelectedPayment(null);
+      setPaymentSubmitForm({
+        amount: '',
+        payment_method: 'bank_transfer',
+        payment_reference: '',
+        notes: ''
+      });
+      fetchLodgerData();
+      alert('Payment submitted successfully! Your landlord will review and confirm.');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to submit payment');
     }
   };
 
@@ -374,52 +411,151 @@ const LodgerDashboard = ({ user, onLogout }) => {
         {/* Payments Tab */}
         {activeTab === 'payments' && (
           <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-gray-900">Payment History</h2>
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Payment Schedule</h2>
+              <p className="text-sm text-gray-600 mt-1">
+                Your 28-day payment cycle schedule. First payment is typically 2 months rent (current + advance).
+              </p>
+            </div>
+
+            {/* Payment Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-white rounded-lg shadow p-4">
+                <p className="text-sm text-gray-600">Total Paid</p>
+                <p className="text-2xl font-bold text-green-600">
+                  £{payments.reduce((sum, p) => sum + parseFloat(p.rent_paid || 0), 0).toFixed(2)}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4">
+                <p className="text-sm text-gray-600">Total Due</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  £{payments.reduce((sum, p) => sum + parseFloat(p.rent_due || 0), 0).toFixed(2)}
+                </p>
+              </div>
+              <div className="bg-white rounded-lg shadow p-4">
+                <p className="text-sm text-gray-600">Outstanding</p>
+                <p className={`text-2xl font-bold ${
+                  (payments.reduce((sum, p) => sum + parseFloat(p.rent_due || 0), 0) -
+                   payments.reduce((sum, p) => sum + parseFloat(p.rent_paid || 0), 0)) > 0
+                    ? 'text-red-600' : 'text-green-600'
+                }`}>
+                  £{Math.abs(
+                    payments.reduce((sum, p) => sum + parseFloat(p.rent_due || 0), 0) -
+                    payments.reduce((sum, p) => sum + parseFloat(p.rent_paid || 0), 0)
+                  ).toFixed(2)}
+                </p>
+              </div>
+            </div>
+
             <div className="bg-white rounded-lg shadow overflow-x-auto">
               <table className="w-full">
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">#</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Due Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Amount</th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Paid</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rent Due</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Rent Paid</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Balance</th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-200">
                   {payments.length > 0 ? (
-                    payments.map((payment) => (
-                      <tr key={payment.id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 whitespace-nowrap font-medium">#{payment.paymentNumber}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">{payment.dueDate}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">£{payment.rentDue}</td>
-                        <td className="px-6 py-4 whitespace-nowrap">£{payment.rentPaid}</td>
-                        <td className={`px-6 py-4 whitespace-nowrap font-medium ${
-                          payment.balance > 0 ? 'text-green-600' : payment.balance < 0 ? 'text-red-600' : ''
-                        }`}>
-                          £{payment.balance}
-                        </td>
-                        <td className="px-6 py-4 whitespace-nowrap">
-                          <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                            payment.status === 'paid' || payment.status === 'confirmed' 
-                              ? 'bg-green-100 text-green-700' 
-                              : 'bg-gray-100 text-gray-700'
+                    payments.map((payment) => {
+                      const dueDate = new Date(payment.due_date);
+                      const today = new Date();
+                      const isPaid = payment.payment_status === 'paid';
+                      const isOverdue = dueDate < today && !isPaid;
+
+                      return (
+                        <tr key={payment.id} className="hover:bg-gray-50">
+                          <td className="px-6 py-4 whitespace-nowrap font-medium">#{payment.payment_number}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {new Date(payment.due_date).toLocaleDateString('en-GB')}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap font-medium">
+                            £{parseFloat(payment.rent_due).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            £{parseFloat(payment.rent_paid || 0).toFixed(2)}
+                          </td>
+                          <td className={`px-6 py-4 whitespace-nowrap font-semibold ${
+                            parseFloat(payment.balance) >= 0 ? 'text-green-600' : 'text-red-600'
                           }`}>
-                            {payment.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+                            £{parseFloat(payment.balance).toFixed(2)}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {isPaid ? (
+                              <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium inline-flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Paid
+                              </span>
+                            ) : payment.payment_status === 'submitted' ? (
+                              <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-medium inline-flex items-center gap-1">
+                                <Send className="w-3 h-3" />
+                                Submitted
+                              </span>
+                            ) : isOverdue ? (
+                              <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-medium inline-flex items-center gap-1">
+                                <Bell className="w-3 h-3" />
+                                Overdue
+                              </span>
+                            ) : (
+                              <span className="px-3 py-1 bg-orange-100 text-orange-700 rounded-full text-xs font-medium inline-flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            {!isPaid && payment.payment_status !== 'submitted' && (
+                              <button
+                                onClick={() => {
+                                  setSelectedPayment(payment);
+                                  setPaymentSubmitForm({
+                                    amount: payment.rent_due,
+                                    payment_method: 'bank_transfer',
+                                    payment_reference: '',
+                                    notes: ''
+                                  });
+                                  setShowSubmitPayment(true);
+                                }}
+                                className="text-indigo-600 hover:text-indigo-900 font-medium text-sm"
+                              >
+                                Submit Payment
+                              </button>
+                            )}
+                            {payment.payment_status === 'submitted' && (
+                              <span className="text-xs text-gray-500">
+                                Awaiting confirmation
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })
                   ) : (
                     <tr>
                       <td colSpan="6" className="px-6 py-12 text-center text-gray-500">
-                        No payment history available
+                        No payment schedule available yet
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Payment Information */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h3 className="font-semibold text-blue-900 mb-2">Payment Information</h3>
+              <ul className="text-sm text-blue-800 space-y-1">
+                <li>• Rent is due every 28 days from your tenancy start date</li>
+                <li>• First payment is typically 2 months rent (current period + 1 month advance)</li>
+                <li>• Balance shows: Rent Paid - Rent Due (positive = credit, negative = amount you owe)</li>
+                <li>• Please ensure payments are made on or before the due date</li>
+                <li>• Contact your landlord if you have any questions about payments</li>
+              </ul>
             </div>
           </div>
         )}
@@ -834,6 +970,107 @@ const LodgerDashboard = ({ user, onLogout }) => {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Submit Payment Modal */}
+      {showSubmitPayment && selectedPayment && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-indigo-600 text-white px-6 py-4 rounded-t-lg">
+              <h2 className="text-xl font-bold">Submit Payment</h2>
+              <p className="text-sm opacity-90">Payment #{selectedPayment.payment_number}</p>
+            </div>
+
+            <form onSubmit={handleSubmitPayment} className="p-6 space-y-4">
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Due Date:</span>
+                  <span className="font-medium">{new Date(selectedPayment.due_date).toLocaleDateString('en-GB')}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-sm text-gray-600">Amount Due:</span>
+                  <span className="font-medium">£{parseFloat(selectedPayment.rent_due).toFixed(2)}</span>
+                </div>
+              </div>
+
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+                <strong>Note:</strong> This notifies your landlord that you have sent payment. Make sure you've actually transferred the money before submitting!
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Amount Paid *</label>
+                <input
+                  type="number"
+                  required
+                  step="0.01"
+                  min="0"
+                  value={paymentSubmitForm.amount}
+                  onChange={(e) => setPaymentSubmitForm({...paymentSubmitForm, amount: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="0.00"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Method *</label>
+                <select
+                  required
+                  value={paymentSubmitForm.payment_method}
+                  onChange={(e) => setPaymentSubmitForm({...paymentSubmitForm, payment_method: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="bank_transfer">Bank Transfer</option>
+                  <option value="cash">Cash</option>
+                  <option value="cheque">Cheque</option>
+                  <option value="standing_order">Standing Order</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Payment Reference</label>
+                <input
+                  type="text"
+                  value={paymentSubmitForm.payment_reference}
+                  onChange={(e) => setPaymentSubmitForm({...paymentSubmitForm, payment_reference: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Transaction reference or description"
+                />
+                <p className="text-xs text-gray-500 mt-1">E.g., bank transaction reference</p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Notes (Optional)</label>
+                <textarea
+                  value={paymentSubmitForm.notes}
+                  onChange={(e) => setPaymentSubmitForm({...paymentSubmitForm, notes: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  rows={2}
+                  placeholder="Any additional information..."
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                >
+                  Submit to Landlord
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowSubmitPayment(false);
+                    setSelectedPayment(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

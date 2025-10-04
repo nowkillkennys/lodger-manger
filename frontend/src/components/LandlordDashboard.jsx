@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Home, Users, CreditCard, Calendar, Settings, LogOut, Bell, Plus, Eye, FileText, TrendingUp, Clock, AlertCircle, Download } from 'lucide-react';
 import axios from 'axios';
 import StatCard from './StatCard';
+import PaymentSchedule from './PaymentSchedule';
 import { API_URL } from '../config';
 
 const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
@@ -51,6 +52,16 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
     overdue: 0
   });
   const [loading, setLoading] = useState(true);
+  const [showEditLodger, setShowEditLodger] = useState(false);
+  const [editLodger, setEditLodger] = useState(null);
+  const [profileForm, setProfileForm] = useState({
+    full_name: user.fullName || '',
+    email: user.email || '',
+    phone: user.phone || '',
+    address: user.address || ''
+  });
+  const [showPaymentSchedule, setShowPaymentSchedule] = useState(false);
+  const [selectedTenancyForPayments, setSelectedTenancyForPayments] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -216,6 +227,40 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
     }
   };
 
+  const handleUpdateProfile = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(`${API_URL}/api/users/profile`, profileForm, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      alert('Profile updated successfully! Please refresh to see changes.');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to update profile');
+    }
+  };
+
+  const handleEditLodgerSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      await axios.put(`${API_URL}/api/users/${editLodger.id}`, {
+        full_name: editLodger.full_name,
+        email: editLodger.email,
+        phone: editLodger.phone
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      setShowEditLodger(false);
+      setEditLodger(null);
+      fetchDashboardData();
+      alert('Lodger information updated successfully!');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to update lodger');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -224,6 +269,20 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
           <p className="text-gray-600">Loading dashboard...</p>
         </div>
       </div>
+    );
+  }
+
+  // Show Payment Schedule if a tenancy is selected
+  if (showPaymentSchedule && selectedTenancyForPayments) {
+    return (
+      <PaymentSchedule
+        tenancy={selectedTenancyForPayments}
+        onBack={() => {
+          setShowPaymentSchedule(false);
+          setSelectedTenancyForPayments(null);
+          fetchDashboardData();
+        }}
+      />
     );
   }
 
@@ -487,6 +546,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -504,6 +564,22 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                           {new Date(lodger.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <button
+                            onClick={() => {
+                              setEditLodger({
+                                id: lodger.id,
+                                full_name: lodger.full_name,
+                                email: lodger.email,
+                                phone: lodger.phone || ''
+                              });
+                              setShowEditLodger(true);
+                            }}
+                            className="text-indigo-600 hover:text-indigo-900 font-medium text-sm"
+                          >
+                            Edit
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -844,8 +920,8 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                           <div className="flex gap-2">
                             <button
                               onClick={() => {
-                                // TODO: Navigate to payment schedule
-                                alert('Payment schedule coming soon');
+                                setSelectedTenancyForPayments(tenancy);
+                                setShowPaymentSchedule(true);
                               }}
                               className="flex-1 bg-blue-600 text-white px-3 py-2 rounded-lg hover:bg-blue-700 transition flex items-center justify-center gap-2 text-xs font-medium"
                             >
@@ -960,9 +1036,66 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
 
         {/* Settings Tab */}
         {activeTab === 'settings' && (
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-2xl font-bold mb-4">Settings</h2>
-            <p className="text-gray-600">Settings panel coming soon...</p>
+          <div className="space-y-6">
+            <div className="bg-white rounded-lg shadow p-6">
+              <h2 className="text-2xl font-bold mb-6">Landlord Profile Settings</h2>
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                    <input
+                      type="text"
+                      required
+                      value={profileForm.full_name}
+                      onChange={(e) => setProfileForm({...profileForm, full_name: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      placeholder="John Smith"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                    <input
+                      type="email"
+                      required
+                      value={profileForm.email}
+                      onChange={(e) => setProfileForm({...profileForm, email: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      placeholder="john@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                    <input
+                      type="tel"
+                      value={profileForm.phone}
+                      onChange={(e) => setProfileForm({...profileForm, phone: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      placeholder="07700900000"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Address *</label>
+                    <textarea
+                      required
+                      value={profileForm.address}
+                      onChange={(e) => setProfileForm({...profileForm, address: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                      placeholder="123 Main Street, London, SW1A 1AA"
+                      rows={3}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">This address will auto-fill in new tenancy agreements</p>
+                  </div>
+                </div>
+                <div className="pt-4 border-t">
+                  <button
+                    type="submit"
+                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </div>
@@ -1323,6 +1456,74 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                     });
                   }}
                   className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Lodger Modal */}
+      {showEditLodger && editLodger && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-indigo-600 text-white px-6 py-4 rounded-t-lg">
+              <h2 className="text-xl font-bold">Edit Lodger Information</h2>
+              <p className="text-sm opacity-90 mt-1">Update contact details for {editLodger.full_name}</p>
+            </div>
+
+            <form onSubmit={handleEditLodgerSubmit} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={editLodger.full_name}
+                  onChange={(e) => setEditLodger({...editLodger, full_name: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="John Doe"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                <input
+                  type="email"
+                  required
+                  value={editLodger.email}
+                  onChange={(e) => setEditLodger({...editLodger, email: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="john@example.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Phone</label>
+                <input
+                  type="tel"
+                  value={editLodger.phone}
+                  onChange={(e) => setEditLodger({...editLodger, phone: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  placeholder="07700900000"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                >
+                  Save Changes
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowEditLodger(false);
+                    setEditLodger(null);
+                  }}
+                  className="flex-1 px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
                 >
                   Cancel
                 </button>

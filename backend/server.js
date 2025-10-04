@@ -902,23 +902,26 @@ app.get('/api/tenancies/:id/payments', authenticateToken, async (req, res) => {
 app.post('/api/payments/:id/submit', authenticateToken, requireRole('lodger'), async (req, res) => {
     try {
         const { id } = req.params;
-        const { amount, payment_reference } = req.body;
-        
+        const { amount, payment_reference, payment_method, notes } = req.body;
+
         const result = await pool.query(
-            `UPDATE payment_schedule 
+            `UPDATE payment_schedule
              SET lodger_submitted_amount = $1,
                  lodger_submitted_date = CURRENT_TIMESTAMP,
                  lodger_payment_reference = $2,
+                 lodger_payment_method = $3,
+                 lodger_notes = $4,
+                 payment_status = 'submitted',
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = $3
+             WHERE id = $5
              RETURNING *`,
-            [amount, payment_reference, id]
+            [amount, payment_reference, payment_method, notes, id]
         );
-        
+
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Payment not found' });
         }
-        
+
         res.json(result.rows[0]);
     } catch (error) {
         console.error('Submit payment error:', error);
@@ -930,30 +933,30 @@ app.post('/api/payments/:id/submit', authenticateToken, requireRole('lodger'), a
 app.post('/api/payments/:id/confirm', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
     try {
         const { id } = req.params;
-        const { amount, notes } = req.body;
-        
+        const { amount, notes, payment_method, payment_reference } = req.body;
+
         const result = await pool.query(
-            `UPDATE payment_schedule 
-             SET landlord_confirmed_amount = $1,
-                 landlord_confirmed_date = CURRENT_TIMESTAMP,
-                 landlord_notes = $2,
-                 rent_paid = $1,
-                 amounts_match = (lodger_submitted_amount = $1),
-                 payment_status = CASE 
+            `UPDATE payment_schedule
+             SET rent_paid = $1,
+                 payment_date = CURRENT_TIMESTAMP,
+                 payment_method = $2,
+                 payment_reference = $3,
+                 notes = $4,
+                 payment_status = CASE
                      WHEN $1 >= rent_due THEN 'paid'
                      WHEN $1 > 0 THEN 'partial'
                      ELSE 'pending'
                  END,
                  updated_at = CURRENT_TIMESTAMP
-             WHERE id = $3
+             WHERE id = $5
              RETURNING *`,
-            [amount, notes, id]
+            [amount, payment_method, payment_reference, notes, id]
         );
-        
+
         if (result.rows.length === 0) {
             return res.status(404).json({ error: 'Payment not found' });
         }
-        
+
         res.json(result.rows[0]);
     } catch (error) {
         console.error('Confirm payment error:', error);
@@ -1095,11 +1098,108 @@ app.post('/api/tenancies/:id/notice', authenticateToken, requireRole('landlord',
             'active'
         ]);
 
+        // Calculate final payment if not immediate termination
+        let finalPaymentInfo = null;
+        if (notice_period_days > 0) {
+            // Get the last payment date from payment_schedule
+            const lastPaymentResult = await client.query(
+                `SELECT due_date, payment_number FROM payment_schedule
+                 WHERE tenancy_id = $1
+                 ORDER BY payment_number DESC
+                 LIMIT 1`,
+                [tenancyId]
+            );
+
+            if (lastPaymentResult.rows.length > 0) {
+                const lastPayment = lastPaymentResult.rows[0];
+                const lastPaymentDate = new Date(lastPayment.due_date);
+
+                // Calculate the last covered date (28 days from last payment)
+                const lastCoveredDate = new Date(lastPaymentDate);
+                lastCoveredDate.setDate(lastCoveredDate.getDate() + 28);
+
+                // If termination date is after last covered date, calculate pro-rata
+                if (effectiveDate > lastCoveredDate) {
+                    const daysToCharge = Math.ceil((effectiveDate - lastCoveredDate) / (1000 * 60 * 60 * 24));
+                    const dailyRate = parseFloat(tenancy.monthly_rent) / 28;
+                    const proRataAmount = dailyRate * daysToCharge;
+
+                    // First payment included 1 month advance, so tenant has credit
+                    const advanceCredit = parseFloat(tenancy.monthly_rent);
+                    const finalAmount = proRataAmount - advanceCredit;
+
+                    finalPaymentInfo = {
+                        lastCoveredDate: lastCoveredDate,
+                        terminationDate: effectiveDate,
+                        daysToCharge: daysToCharge,
+                        proRataAmount: parseFloat(proRataAmount.toFixed(2)),
+                        advanceCredit: advanceCredit,
+                        finalAmount: parseFloat(finalAmount.toFixed(2)),
+                        type: finalAmount > 0 ? 'payment_due' : 'refund_due'
+                    };
+
+                    // Add final payment to schedule
+                    await client.query(
+                        `INSERT INTO payment_schedule (
+                            tenancy_id, payment_number, due_date, rent_due,
+                            payment_status, notes
+                        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+                        [
+                            tenancyId,
+                            lastPayment.payment_number + 1,
+                            effectiveDate,
+                            Math.abs(finalAmount), // Store as positive, note indicates direction
+                            'pending',
+                            finalAmount < 0
+                                ? `Final settlement: £${advanceCredit} advance credit minus £${proRataAmount.toFixed(2)} for ${daysToCharge} days. REFUND DUE TO TENANT.`
+                                : `Final pro-rata payment for ${daysToCharge} days after advance credit applied.`
+                        ]
+                    );
+                } else {
+                    // Termination is before last covered date - full refund scenario
+                    const daysCovered = Math.ceil((lastCoveredDate - effectiveDate) / (1000 * 60 * 60 * 24));
+                    const dailyRate = parseFloat(tenancy.monthly_rent) / 28;
+                    const refundAmount = (dailyRate * daysCovered) + parseFloat(tenancy.monthly_rent); // Days + advance
+
+                    finalPaymentInfo = {
+                        lastCoveredDate: lastCoveredDate,
+                        terminationDate: effectiveDate,
+                        daysCovered: daysCovered,
+                        refundAmount: parseFloat(refundAmount.toFixed(2)),
+                        advanceCredit: parseFloat(tenancy.monthly_rent),
+                        type: 'refund_due'
+                    };
+
+                    // Add refund entry to schedule
+                    await client.query(
+                        `INSERT INTO payment_schedule (
+                            tenancy_id, payment_number, due_date, rent_due,
+                            payment_status, notes
+                        ) VALUES ($1, $2, $3, $4, $5, $6)`,
+                        [
+                            tenancyId,
+                            lastPayment.payment_number + 1,
+                            effectiveDate,
+                            refundAmount,
+                            'pending',
+                            `Final settlement: Refund of £${refundAmount.toFixed(2)} (${daysCovered} days overpaid + £${tenancy.monthly_rent} advance credit). REFUND DUE TO TENANT.`
+                        ]
+                    );
+                }
+            }
+        }
+
         // If immediate termination, update tenancy status
         if (notice_period_days === 0) {
             await client.query(
                 'UPDATE tenancies SET status = $1, termination_date = $2 WHERE id = $3',
                 ['terminated', noticeDate, tenancyId]
+            );
+        } else {
+            // Set status to notice_given
+            await client.query(
+                'UPDATE tenancies SET status = $1 WHERE id = $2',
+                ['notice_given', tenancyId]
             );
         }
 
@@ -1108,7 +1208,8 @@ app.post('/api/tenancies/:id/notice', authenticateToken, requireRole('landlord',
         res.json({
             message: 'Notice given successfully',
             notice: noticeResult.rows[0],
-            immediate_termination: notice_period_days === 0
+            immediate_termination: notice_period_days === 0,
+            final_payment: finalPaymentInfo
         });
     } catch (error) {
         await client.query('ROLLBACK');
