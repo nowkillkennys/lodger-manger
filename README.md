@@ -766,6 +766,151 @@ WHERE id = 'YOUR_TENANCY_ID';
 
 ---
 
+## 🆕 Recent Updates & Features
+
+### Photo ID Display Fix
+- **Issue:** Photo ID images weren't displaying in tenancy details
+- **Fix:** Updated file path handling to include `/uploads/general/` subdirectory
+- **Changes:**
+  - Updated `server.js` line 667 to save correct path
+  - Configured Helmet.js for cross-origin image loading
+  - Fixed nginx configuration to point to `frontend:80`
+
+### Payment Details Feature
+Landlords can now provide bank account details to lodgers for rent payments.
+
+**Landlord Side (Settings Tab):**
+- Bank Account Number field
+- Sort Code field
+- Payment Reference field
+- Details saved to user profile
+
+**Lodger Side (Payment Submission):**
+- Landlord's bank details displayed in green info box
+- Shows account number, sort code, and payment reference
+- Appears when submitting rent payments
+
+**Implementation:**
+- Added 3 columns to users table: `bank_account_number`, `bank_sort_code`, `payment_reference`
+- Updated PUT `/api/users/profile` endpoint to save payment details
+- Modified tenancies query to include landlord payment details for lodgers
+- Added UI components in [LandlordDashboard.jsx](frontend/src/components/LandlordDashboard.jsx) (lines 1093-1132)
+- Added display in [LodgerDashboard.jsx](frontend/src/components/LodgerDashboard.jsx) (lines 1038-1063)
+
+### Legal Agreement Update
+Updated PDF generation with complete UK lodger agreement text:
+- PART 1 with all property and payment details
+- Section 1-10: Complete legal clauses
+- Proper termination clauses (Section 9)
+- Behaviour breach clause (9.3)
+- Right to Rent compliance (Immigration Act 2014)
+- Payment day auto-filled: "The 28th day of each month"
+- All sections match official lodger agreement template
+
+**Updated in:** [server.js](backend/server.js) lines 749-895
+
+### Remote Access Configuration
+Fixed login issues when accessing from iPad or other devices via IP address.
+
+**Before:** `frontend/src/config.js` had `API_URL = 'http://localhost:3001'`
+**After:** `API_URL = ''` (empty string for relative URLs)
+
+**Benefits:**
+- Works from any device on local network
+- Access via `http://192.168.x.x:80`
+- All API calls route through nginx proxy
+- No need to update config for each device
+
+### Agreement Modal UX Improvements
+**Added Features:**
+- Close button (X) in agreement modal header
+- "Action Required" alert banner on Overview tab when unsigned
+- "Review & Sign Agreement" button on Agreement tab
+- Ability to close and return to complete agreement later
+
+**Implementation:**
+- Added close button in [LodgerDashboard.jsx](frontend/src/components/LodgerDashboard.jsx) (lines 697-711)
+- Added alert banner with AlertTriangle icon (lines 287-305)
+- Added review button on Agreement tab (lines 608-614)
+
+### Name Auto-Fill in Agreements
+Fixed issue where landlord and lodger names weren't appearing in generated agreements.
+
+**Changes:**
+- Updated tenancies query to JOIN users table for `landlord_name` and `lodger_name`
+- Modified frontend to use `tenancy.landlord_name` instead of placeholder
+- Updated PDF generation to use proper lodger name from database
+- Agreement now shows: "HOUSEHOLDER (Landlord): John Smith" and "LODGER: Jane Doe"
+
+**Files Updated:**
+- [server.js](backend/server.js) - Added JOINs to tenancies query (lines 513-529, 704-716)
+- [LodgerDashboard.jsx](frontend/src/components/LodgerDashboard.jsx) - Updated name display (line 800)
+
+### Missing API Endpoints Added
+Created three new endpoints to resolve console errors:
+
+**GET /api/payments** ([server.js](backend/server.js) lines 987-1020)
+- Returns all payments for landlord or lodger
+- Includes property address and lodger name
+- Filtered by user role
+
+**GET /api/notifications** ([server.js](backend/server.js) lines 1027-1035)
+- Placeholder for future notifications feature
+- Returns empty array for now
+
+**GET /api/dashboard/landlord** ([server.js](backend/server.js) lines 1042-1094)
+- Total properties count
+- Total lodgers count
+- Total rent collected this month
+- Pending payments count
+- Active tenancies count
+- Notice period tenancies count
+
+### Database Schema Changes
+
+**Payment Details:**
+```sql
+ALTER TABLE users
+ADD COLUMN IF NOT EXISTS bank_account_number VARCHAR(20),
+ADD COLUMN IF NOT EXISTS bank_sort_code VARCHAR(10),
+ADD COLUMN IF NOT EXISTS payment_reference VARCHAR(100);
+```
+
+**Payment Submission Fields:**
+```sql
+ALTER TABLE payment_schedule
+ADD COLUMN IF NOT EXISTS lodger_submitted_amount DECIMAL(10,2),
+ADD COLUMN IF NOT EXISTS lodger_submitted_date TIMESTAMP,
+ADD COLUMN IF NOT EXISTS lodger_payment_reference VARCHAR(100),
+ADD COLUMN IF NOT EXISTS lodger_payment_method VARCHAR(50),
+ADD COLUMN IF NOT EXISTS lodger_notes TEXT;
+```
+
+**Status Updates:**
+```sql
+ALTER TYPE payment_status ADD VALUE IF NOT EXISTS 'submitted';
+ALTER TYPE tenancy_status ADD VALUE IF NOT EXISTS 'notice_given';
+```
+
+### Configuration Files Updated
+
+**nginx.conf:**
+- Fixed upstream frontend port from 3000 to 80
+- Resolves 502 Bad Gateway error
+
+**frontend/src/config.js:**
+- Changed API_URL from localhost to empty string
+- Enables access from any device via IP address
+
+### Testing & Quality Assurance
+- Reset test accounts for clean onboarding testing
+- Verified photo ID upload and display
+- Tested payment submission and confirmation workflow
+- Validated notice termination calculations
+- Confirmed all features work on iPad via IP access
+
+---
+
 ## 🔧 Troubleshooting
 
 ### Frontend Can't Connect to Backend

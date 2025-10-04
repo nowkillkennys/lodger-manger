@@ -58,10 +58,14 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
     full_name: user.fullName || '',
     email: user.email || '',
     phone: user.phone || '',
-    address: user.address || ''
+    address: user.address || '',
+    bank_account_number: user.bankAccountNumber || '',
+    bank_sort_code: user.bankSortCode || '',
+    payment_reference: user.paymentReference || ''
   });
   const [showPaymentSchedule, setShowPaymentSchedule] = useState(false);
   const [selectedTenancyForPayments, setSelectedTenancyForPayments] = useState(null);
+  const [factoryResetPassword, setFactoryResetPassword] = useState('');
 
   useEffect(() => {
     fetchDashboardData();
@@ -261,6 +265,121 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
     }
   };
 
+  const handleBackup = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/api/backup`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      // Create a blob from the response data
+      const blob = new Blob([JSON.stringify(response.data, null, 2)], { type: 'application/json' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `lodger-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+
+      alert('Backup downloaded successfully!');
+    } catch (error) {
+      console.error('Backup error:', error);
+      alert(error.response?.data?.error || 'Failed to create backup');
+    }
+  };
+
+  const handleRestore = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (!confirm('Are you sure you want to restore from this backup? This will update your profile settings.')) {
+      e.target.value = '';
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const formData = new FormData();
+      formData.append('backup', file);
+
+      const response = await axios.post(`${API_URL}/api/restore`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+
+      alert(response.data.message + '\n\n' + (response.data.note || ''));
+
+      // Refresh the page to show updated data
+      window.location.reload();
+    } catch (error) {
+      console.error('Restore error:', error);
+      alert(error.response?.data?.error || 'Failed to restore backup');
+    } finally {
+      e.target.value = '';
+    }
+  };
+
+  const handleFactoryReset = async () => {
+    if (!factoryResetPassword) {
+      alert('Please enter your password to confirm factory reset');
+      return;
+    }
+
+    const confirmed = confirm(
+      '⚠️ FINAL WARNING ⚠️\n\n' +
+      'This will permanently delete ALL data:\n' +
+      '• All tenancies\n' +
+      '• All payments\n' +
+      '• All lodgers\n' +
+      '• All notices\n' +
+      '• All settings\n\n' +
+      'Only your admin account will remain.\n\n' +
+      'This action CANNOT be undone!\n\n' +
+      'Type "DELETE ALL" in the next prompt to proceed.'
+    );
+
+    if (!confirmed) {
+      setFactoryResetPassword('');
+      return;
+    }
+
+    const finalConfirmation = prompt('Type "DELETE ALL" to confirm factory reset:');
+    if (finalConfirmation !== 'DELETE ALL') {
+      alert('Factory reset cancelled - confirmation text did not match');
+      setFactoryResetPassword('');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`${API_URL}/api/factory-reset`, {
+        password: factoryResetPassword
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      alert(response.data.message + '\n\n' + (response.data.note || ''));
+
+      // Clear password field
+      setFactoryResetPassword('');
+
+      // Log out and redirect to login
+      setTimeout(() => {
+        localStorage.removeItem('token');
+        window.location.href = '/';
+      }, 2000);
+
+    } catch (error) {
+      console.error('Factory reset error:', error);
+      alert(error.response?.data?.error || 'Failed to perform factory reset');
+      setFactoryResetPassword('');
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -328,7 +447,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200">
           <nav className="flex gap-8">
-            {['overview', 'lodgers', 'tenancies', 'payments', 'calendar', 'settings'].map((tab) => (
+            {['overview', 'lodgers', 'tenancies', 'payments', 'calendar', 'profile', 'settings'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -338,7 +457,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
-                {tab}
+                {tab === 'profile' ? 'My Profile' : tab}
               </button>
             ))}
           </nav>
@@ -1034,12 +1153,11 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
           </div>
         )}
 
-        {/* Settings Tab */}
-        {activeTab === 'settings' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-lg shadow p-6">
-              <h2 className="text-2xl font-bold mb-6">Landlord Profile Settings</h2>
-              <form onSubmit={handleUpdateProfile} className="space-y-4">
+        {/* My Profile Tab */}
+        {activeTab === 'profile' && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6">My Profile</h2>
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">Full Name *</label>
@@ -1086,6 +1204,48 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                     <p className="text-xs text-gray-500 mt-1">This address will auto-fill in new tenancy agreements</p>
                   </div>
                 </div>
+
+                {/* Payment Details Section */}
+                <div className="pt-6 border-t">
+                  <h3 className="text-lg font-semibold mb-4 text-gray-900">Payment Details</h3>
+                  <p className="text-sm text-gray-600 mb-4">These details will be shown to lodgers when they submit rent payments</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Bank Account Number</label>
+                      <input
+                        type="text"
+                        value={profileForm.bank_account_number}
+                        onChange={(e) => setProfileForm({...profileForm, bank_account_number: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="12345678"
+                        maxLength="20"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Sort Code</label>
+                      <input
+                        type="text"
+                        value={profileForm.bank_sort_code}
+                        onChange={(e) => setProfileForm({...profileForm, bank_sort_code: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="12-34-56"
+                        maxLength="10"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Payment Reference</label>
+                      <input
+                        type="text"
+                        value={profileForm.payment_reference}
+                        onChange={(e) => setProfileForm({...profileForm, payment_reference: e.target.value})}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                        placeholder="e.g., RENT-[LODGER NAME] or Reference Number"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">Optional: Specify how lodgers should reference their payments</p>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="pt-4 border-t">
                   <button
                     type="submit"
@@ -1095,6 +1255,120 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                   </button>
                 </div>
               </form>
+            </div>
+        )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-2xl font-bold mb-6">Settings</h2>
+
+            {/* Backup & Restore Section */}
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-4 text-gray-900">Backup & Restore</h3>
+                <p className="text-sm text-gray-600 mb-6">
+                  Download a backup of all your data including profile, tenancies, payments, and notices.
+                  You can restore your profile settings from a previous backup.
+                </p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Backup Button */}
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3 mb-3">
+                      <Download className="w-5 h-5 text-indigo-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Backup Data</h4>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Download all your data as a JSON file
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleBackup}
+                      className="w-full px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-medium"
+                    >
+                      Download Backup
+                    </button>
+                  </div>
+
+                  {/* Restore Button */}
+                  <div className="border border-gray-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3 mb-3">
+                      <FileText className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-gray-900">Restore Profile</h4>
+                        <p className="text-sm text-gray-600 mt-1">
+                          Restore profile settings from a backup file
+                        </p>
+                      </div>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".json"
+                      onChange={handleRestore}
+                      className="hidden"
+                      id="restore-file"
+                    />
+                    <label
+                      htmlFor="restore-file"
+                      className="w-full block px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-medium text-center cursor-pointer"
+                    >
+                      Upload Backup File
+                    </label>
+                  </div>
+                </div>
+
+                <div className="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                    <div className="text-sm text-amber-800">
+                      <p className="font-semibold mb-1">Important Notes:</p>
+                      <ul className="list-disc list-inside space-y-1">
+                        <li>Backups include all your data (profile, tenancies, payments, notices)</li>
+                        <li>Restore currently only updates profile settings for safety</li>
+                        <li>Store backup files securely - they contain sensitive information</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Factory Reset Section (Admin Only) */}
+              {user.userType === 'admin' && (
+                <div className="pt-6 border-t">
+                  <h3 className="text-lg font-semibold mb-4 text-red-600">Danger Zone</h3>
+                  <div className="border-2 border-red-200 rounded-lg p-4 bg-red-50">
+                    <div className="flex items-start gap-3 mb-4">
+                      <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <h4 className="font-semibold text-red-900 mb-2">Factory Reset</h4>
+                        <p className="text-sm text-red-800 mb-3">
+                          This will permanently delete ALL data including tenancies, payments, lodgers, and notices.
+                          Only your admin account will remain. This action cannot be undone!
+                        </p>
+                        <div className="bg-white border border-red-300 rounded-lg p-3 mb-3">
+                          <p className="text-sm font-semibold text-red-900 mb-2">Enter your password to confirm:</p>
+                          <input
+                            type="password"
+                            value={factoryResetPassword}
+                            onChange={(e) => setFactoryResetPassword(e.target.value)}
+                            className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
+                            placeholder="Enter admin password"
+                          />
+                        </div>
+                        <button
+                          onClick={handleFactoryReset}
+                          disabled={!factoryResetPassword}
+                          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
+                        >
+                          Factory Reset - Delete All Data
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1201,11 +1475,18 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                   {selectedTenancy.photo_id_path ? (
                     <div>
                       <p className="text-sm text-gray-600 mb-3">Photo ID uploaded by lodger:</p>
-                      <div className="border-2 border-gray-300 rounded-lg p-4 bg-gray-50 flex items-center justify-center min-h-[400px]">
+                      <div className="border-2 border-gray-300 rounded-lg p-4 bg-gray-50 overflow-auto">
                         <img
-                          src={`${API_URL}${selectedTenancy.photo_id_path}`}
+                          src={selectedTenancy.photo_id_path}
                           alt="Lodger Photo ID"
-                          className="max-w-full max-h-[600px] w-auto h-auto object-contain rounded shadow-lg"
+                          className="rounded shadow-lg mx-auto block"
+                          style={{ maxWidth: '100%', height: 'auto' }}
+                          onError={(e) => {
+                            console.error('Image failed to load:', selectedTenancy.photo_id_path);
+                          }}
+                          onLoad={(e) => {
+                            console.log('Image loaded successfully:', selectedTenancy.photo_id_path);
+                          }}
                         />
                       </div>
                       <p className="text-xs text-gray-500 mt-2 text-center">

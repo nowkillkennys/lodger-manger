@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Bell, LogOut, DollarSign, Clock, Send, Wrench, FileText, Download, Eye, Info } from 'lucide-react';
+import { Home, Bell, LogOut, DollarSign, Clock, Send, Wrench, FileText, Download, Eye, Info, AlertTriangle } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../config';
 
@@ -283,6 +283,27 @@ const LodgerDashboard = ({ user, onLogout }) => {
         {/* Overview Tab */}
         {activeTab === 'overview' && (
           <>
+            {/* Agreement Pending Alert */}
+            {tenancy && !tenancy.lodger_signature && (
+              <div className="bg-orange-50 border-l-4 border-orange-500 rounded-lg p-4 mb-6">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-6 h-6 text-orange-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-orange-900 mb-1">Action Required: Sign Your Tenancy Agreement</h3>
+                    <p className="text-sm text-orange-800 mb-3">
+                      You need to review and sign your tenancy agreement before you can access all features.
+                    </p>
+                    <button
+                      onClick={() => setShowAgreementModal(true)}
+                      className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition text-sm font-medium"
+                    >
+                      Review & Sign Agreement Now
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Welcome Banner */}
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg shadow-lg p-6 text-white mb-6">
               <h2 className="text-2xl font-bold mb-2">Welcome back, {user.fullName}!</h2>
@@ -574,7 +595,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
                     Reference: {tenancy.agreementReference || 'N/A'}
                   </p>
                 </div>
-<div className="flex gap-2">
+                <div className="flex gap-2">
                   {tenancy.signed_agreement_path ? (
                     <>
                       <a
@@ -595,7 +616,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
                         Download PDF
                       </a>
                     </>
-                  ) : (
+                  ) : tenancy.lodger_signature ? (
                     <button
                       className="flex items-center gap-2 px-4 py-2 bg-gray-400 text-white rounded-lg cursor-not-allowed"
                       disabled
@@ -603,6 +624,14 @@ const LodgerDashboard = ({ user, onLogout }) => {
                     >
                       <Download className="w-4 h-4" />
                       PDF Pending Approval
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowAgreementModal(true)}
+                      className="flex items-center gap-2 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition"
+                    >
+                      <FileText className="w-4 h-4" />
+                      Review & Sign Agreement
                     </button>
                   )}
                 </div>
@@ -694,9 +723,20 @@ const LodgerDashboard = ({ user, onLogout }) => {
       {showAgreementModal && tenancy && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-6 py-4">
-              <h2 className="text-2xl font-bold text-gray-900">Review & Accept Tenancy Agreement</h2>
-              <p className="text-sm text-gray-600 mt-1">Please review your agreement and upload photo ID</p>
+            <div className="sticky top-0 bg-white border-b px-6 py-4 flex justify-between items-start">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">Review & Accept Tenancy Agreement</h2>
+                <p className="text-sm text-gray-600 mt-1">Please review your agreement and upload photo ID</p>
+              </div>
+              <button
+                onClick={() => setShowAgreementModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+                aria-label="Close modal"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
             </div>
 
             <div className="p-6 space-y-6">
@@ -756,8 +796,8 @@ const LodgerDashboard = ({ user, onLogout }) => {
                     <p><strong>PROPERTY:</strong> {tenancy.address}</p>
                     <p><strong>ROOM:</strong> {tenancy.room_description || 'Means the room or rooms in the Property which the Householder allocates to the Lodger'}</p>
                     <p><strong>SHARED AREAS:</strong> {tenancy.shared_areas || 'Entrance hall, staircase and landings, kitchen for cooking and storage, lavatory and bathroom, sitting room, garden (where applicable)'}</p>
-                    <p><strong>HOUSEHOLDER (Landlord):</strong> [Landlord Name]</p>
-                    <p><strong>LODGER:</strong> {user.fullName}</p>
+                    <p><strong>HOUSEHOLDER (Landlord):</strong> {tenancy.landlord_name}</p>
+                    <p><strong>LODGER:</strong> {tenancy.lodger_name || user.fullName}</p>
                     <p><strong>START DATE:</strong> {new Date(tenancy.start_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</p>
                     <p><strong>TERM:</strong> {tenancy.initial_term_months} Months Rolling Contract until Terminated by either party</p>
                     <p><strong>INITIAL PAYMENT:</strong> £{tenancy.initial_payment} (current and month in advance payment)</p>
@@ -994,6 +1034,33 @@ const LodgerDashboard = ({ user, onLogout }) => {
                   <span className="font-medium">£{parseFloat(selectedPayment.rent_due).toFixed(2)}</span>
                 </div>
               </div>
+
+              {/* Landlord Payment Details */}
+              {(tenancy?.landlord_bank_account || tenancy?.landlord_sort_code || tenancy?.landlord_payment_reference) && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <h3 className="font-semibold text-green-900 mb-2">Payment Details</h3>
+                  <div className="space-y-1 text-sm">
+                    {tenancy.landlord_bank_account && (
+                      <div className="flex justify-between">
+                        <span className="text-green-700">Account Number:</span>
+                        <span className="font-mono font-semibold">{tenancy.landlord_bank_account}</span>
+                      </div>
+                    )}
+                    {tenancy.landlord_sort_code && (
+                      <div className="flex justify-between">
+                        <span className="text-green-700">Sort Code:</span>
+                        <span className="font-mono font-semibold">{tenancy.landlord_sort_code}</span>
+                      </div>
+                    )}
+                    {tenancy.landlord_payment_reference && (
+                      <div className="flex justify-between">
+                        <span className="text-green-700">Reference:</span>
+                        <span className="font-semibold">{tenancy.landlord_payment_reference}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
                 <strong>Note:</strong> This notifies your landlord that you have sent payment. Make sure you've actually transferred the money before submitting!

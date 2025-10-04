@@ -67,11 +67,11 @@ EOF
 mkdir -p backend
 cat > backend/.env << EOF
 NODE_ENV=production
-PORT=5000
+PORT=3001
 DB_HOST=postgres
 DB_PORT=5432
 DB_NAME=lodger_management
-DB_USER=lodger_admin
+DB_USER=postgres
 DB_PASSWORD=${DB_PASSWORD}
 JWT_SECRET=${JWT_SECRET}
 FRONTEND_URL=http://localhost:3000
@@ -80,7 +80,7 @@ EOF
 # Frontend .env
 mkdir -p frontend
 cat > frontend/.env << EOF
-REACT_APP_API_URL=http://localhost:5000/api
+REACT_APP_API_URL=
 EOF
 
 echo -e "${GREEN}✅ Environment files created${NC}"
@@ -110,7 +110,7 @@ echo "⏳ Waiting for PostgreSQL to be ready..."
 sleep 10
 
 # Check if PostgreSQL is ready
-until docker-compose exec -T postgres pg_isready -U lodger_admin > /dev/null 2>&1; do
+until docker-compose exec -T postgres pg_isready -U postgres > /dev/null 2>&1; do
     echo "Waiting for PostgreSQL..."
     sleep 2
 done
@@ -137,9 +137,9 @@ echo ""
 # Hash password and create user
 HASHED_PASSWORD=$(docker-compose exec -T backend node -e "console.log(require('bcrypt').hashSync('${ADMIN_PASSWORD}', 10))")
 
-docker-compose exec -T postgres psql -U lodger_admin lodger_management << EOF
+docker-compose exec -T postgres psql -U postgres lodger_management << EOF
 INSERT INTO users (email, password_hash, full_name, user_type)
-VALUES ('${ADMIN_EMAIL}', '${HASHED_PASSWORD}', 'System Administrator', 'landlord')
+VALUES ('${ADMIN_EMAIL}', '${HASHED_PASSWORD}', 'System Administrator', 'admin')
 ON CONFLICT (email) DO NOTHING;
 EOF
 
@@ -156,17 +156,23 @@ echo "✨ Setup Complete!"
 echo "===================="
 echo ""
 echo "🌐 Access your application:"
-echo "   Frontend: http://localhost:3000"
-echo "   Backend API: http://localhost:5000"
+echo "   Frontend: http://localhost (via nginx) or http://localhost:3000"
+echo "   Backend API: http://localhost:3001"
 echo ""
 echo "🔐 Admin Credentials:"
 echo "   Email: ${ADMIN_EMAIL}"
 echo "   Password: ${ADMIN_PASSWORD}"
 echo ""
 echo "📝 Next Steps:"
-echo "   1. Open http://localhost:3000 in your browser"
+echo "   1. Open http://localhost in your browser (or http://localhost:3000)"
 echo "   2. Login with your admin credentials"
-echo "   3. Click 'New Tenancy' to create your first lodger"
+echo "   3. Navigate to Settings tab to configure payment details"
+echo "   4. Click 'New Tenancy' on Tenancies tab to create your first lodger"
+echo ""
+echo "💾 Backup & Restore:"
+echo "   - Backup your data: Settings tab > Download Backup"
+echo "   - Restore profile: Settings tab > Upload Backup File"
+echo "   - Factory Reset (Admin): Settings tab > Danger Zone"
 echo ""
 echo "📚 Useful Commands:"
 echo "   View logs:     docker-compose logs -f"

@@ -47,7 +47,9 @@ pool.connect((err, client, release) => {
 // MIDDLEWARE
 // ============================================
 
-app.use(helmet());
+app.use(helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+}));
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -344,7 +346,7 @@ app.post('/api/users/:id/reset-password', authenticateToken, requireRole('landlo
 // Update own profile
 app.put('/api/users/profile', authenticateToken, async (req, res) => {
     try {
-        const { full_name, phone, address, email } = req.body;
+        const { full_name, phone, address, email, bank_account_number, bank_sort_code, payment_reference } = req.body;
         const userId = req.user.id;
 
         // Build update query dynamically
@@ -368,6 +370,18 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
             updates.push(`email = $${paramCount++}`);
             values.push(email);
         }
+        if (bank_account_number !== undefined) {
+            updates.push(`bank_account_number = $${paramCount++}`);
+            values.push(bank_account_number);
+        }
+        if (bank_sort_code !== undefined) {
+            updates.push(`bank_sort_code = $${paramCount++}`);
+            values.push(bank_sort_code);
+        }
+        if (payment_reference !== undefined) {
+            updates.push(`payment_reference = $${paramCount++}`);
+            values.push(payment_reference);
+        }
 
         if (updates.length === 0) {
             return res.status(400).json({ error: 'No fields to update' });
@@ -377,7 +391,7 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
         values.push(userId);
 
         const result = await pool.query(
-            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone, address`,
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone, address, bank_account_number, bank_sort_code, payment_reference`,
             values
         );
 
@@ -497,11 +511,18 @@ app.get('/api/tenancies', authenticateToken, async (req, res) => {
         let query, params;
 
         if (req.user.user_type === 'lodger') {
-            // Lodgers see only their tenancies
+            // Lodgers see only their tenancies with landlord payment details
             query = `
-                SELECT t.*, u.full_name as lodger_name, t.property_address as address
+                SELECT t.*,
+                       u.full_name as lodger_name,
+                       landlord.full_name as landlord_name,
+                       landlord.bank_account_number as landlord_bank_account,
+                       landlord.bank_sort_code as landlord_sort_code,
+                       landlord.payment_reference as landlord_payment_reference,
+                       t.property_address as address
                 FROM tenancies t
                 JOIN users u ON t.lodger_id = u.id
+                JOIN users landlord ON t.landlord_id = landlord.id
                 WHERE t.lodger_id = $1
                 ORDER BY t.created_at DESC
             `;
@@ -509,9 +530,13 @@ app.get('/api/tenancies', authenticateToken, async (req, res) => {
         } else {
             // Landlords see all their tenancies
             query = `
-                SELECT t.*, u.full_name as lodger_name, t.property_address as address
+                SELECT t.*,
+                       u.full_name as lodger_name,
+                       landlord.full_name as landlord_name,
+                       t.property_address as address
                 FROM tenancies t
                 JOIN users u ON t.lodger_id = u.id
+                JOIN users landlord ON t.landlord_id = landlord.id
                 WHERE t.landlord_id = $1
                 ORDER BY t.created_at DESC
             `;
@@ -664,7 +689,7 @@ app.post('/api/tenancies/:id/accept', authenticateToken, upload.single('photo_id
             return res.status(404).json({ error: 'Tenancy not found' });
         }
 
-        const photoIdPath = req.file ? `/uploads/${req.file.filename}` : null;
+        const photoIdPath = req.file ? `/uploads/general/${req.file.filename}` : null;
 
         // Update tenancy with lodger signature and photo ID
         const result = await pool.query(
@@ -690,9 +715,12 @@ app.post('/api/tenancies/:id/approve', authenticateToken, requireRole('landlord'
     try {
         const { id } = req.params;
 
-        // Verify tenancy belongs to landlord
+        // Verify tenancy belongs to landlord and get lodger info
         const tenancyCheck = await pool.query(
-            'SELECT * FROM tenancies WHERE id = $1 AND landlord_id = $2',
+            `SELECT t.*, u.full_name as lodger_name
+             FROM tenancies t
+             JOIN users u ON t.lodger_id = u.id
+             WHERE t.id = $1 AND t.landlord_id = $2`,
             [id, req.user.id]
         );
 
@@ -733,7 +761,7 @@ app.post('/api/tenancies/:id/approve', authenticateToken, requireRole('landlord'
         pdfDoc.fontSize(12).text('AGREEMENT FOR NON-EXCLUSIVE OR SHARED OCCUPATION', { align: 'center' });
         pdfDoc.moveDown();
 
-        pdfDoc.fontSize(9).text('This LODGER AGREEMENT is made up of the details about the parties and the agreement in Part 1, the Terms and Conditions printed below in Part 2, whereby the Room is licensed by the Householder and taken by the Lodger during the Term upon making the Accommodation Payment.', { align: 'justify' });
+        pdfDoc.fontSize(9).text('This LODGER AGREEMENT is made up of the details about the parties and the agreement in Part 1, the Terms and Conditions printed below in Part 2, and any Special Terms and Conditions agreed between the parties which have been recorded in Part 3, whereby the Room is licensed by the Householder and taken by the Lodger during the Term upon making the Accommodation Payment.', { align: 'justify' });
         pdfDoc.moveDown();
 
         // PART 1 - PARTICULARS
@@ -741,24 +769,32 @@ app.post('/api/tenancies/:id/approve', authenticateToken, requireRole('landlord'
         pdfDoc.moveDown(0.5);
         pdfDoc.fontSize(9);
         pdfDoc.text(`PROPERTY: ${tenancy.property_address}`);
-        pdfDoc.text(`ROOM: ${tenancy.room_description || 'Means the room or rooms in the Property which the Householder allocates to the Lodger'}`);
-        pdfDoc.text(`SHARED AREAS: ${tenancy.shared_areas || 'Entrance hall, staircase and landings, kitchen for cooking and storage, lavatory and bathroom, sitting room, garden'}`);
-        pdfDoc.text(`HOUSEHOLDER (Landlord): ${req.user.full_name}`);
-        pdfDoc.text(`LODGER: ${tenancy.lodger_signature}`);
-        pdfDoc.text(`START DATE: ${new Date(tenancy.start_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`);
-        pdfDoc.text(`TERM: ${tenancy.initial_term_months} Months Rolling Contract`);
-        pdfDoc.text(`INITIAL PAYMENT: £${tenancy.initial_payment} (current and month in advance)`);
-        pdfDoc.text(`ACCOMMODATION PAYMENT: £${tenancy.monthly_rent} per 28 days`);
-        pdfDoc.text(`DEPOSIT: £${tenancy.deposit_amount || 0} ${tenancy.deposit_applicable ? '(Applicable)' : '(Not Applicable)'}`);
+        pdfDoc.text(`ROOM: ${tenancy.room_description || 'means the room or rooms in the Property which as the Householder from time to time allocates to the Lodger'}`);
+        pdfDoc.text(`SHARED AREAS: ${tenancy.shared_areas || 'the entrance hall, staircase and landings of the Property, the kitchen for cooking eating and the storage of food, the lavatory and bathroom, the sitting room, the garden (where applicable). Should the Lodger not be allowed to use any of these areas or there are any additional Shared Areas in the Property they can use, this should be reflected in Part 3: Property Rules and Services and Any Additional Terms'}`);
+        pdfDoc.text(`HOUSEHOLDER: ${req.user.full_name}`);
+        pdfDoc.text(`LODGER: ${tenancy.lodger_name}`);
+        pdfDoc.moveDown(0.3);
+        pdfDoc.text('_________________________________');
+        pdfDoc.moveDown(0.3);
+        pdfDoc.text(`START DAY: ${new Date(tenancy.start_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}`);
+        pdfDoc.text(`TERM: ${tenancy.initial_term_months} Months Rolling Contract until Terminated by either party`);
+        pdfDoc.text(`INITIAL PAYMENT: £${tenancy.initial_payment}, (current and month in advanced payment)`);
+        pdfDoc.text(`ACCOMMODATION PAYMENT: £${tenancy.monthly_rent} PM`);
+        pdfDoc.text(`PAYMENT DAY: The 28th day of each month`);
+        pdfDoc.text(`DEPOSIT: £${tenancy.deposit_amount || 0} If Applicable (${tenancy.deposit_applicable ? 'yes' : 'no'})`);
         pdfDoc.moveDown();
 
         // EARLY TERMINATION & UTILITIES
         pdfDoc.fontSize(10).text('EARLY TERMINATION:', { underline: true });
-        pdfDoc.fontSize(9).text('Either party may at any time end this Agreement by giving notice in writing of at least one calendar month ending on the Payment Day.');
+        pdfDoc.fontSize(9).text('Either party may at any time end this Agreement earlier than the End Date by giving notice in writing of at least one calendar month ending on the Payment Day if within of the rental term any if any deposits and or advance payments was taken will be void unless mutually agreed by both parties and or breach of this agreement');
         pdfDoc.moveDown(0.5);
 
         pdfDoc.fontSize(10).text('UTILITY COSTS:', { underline: true });
-        pdfDoc.fontSize(9).text('All utilities including gas, electric, water, basic internet, and Council Tax are INCLUDED. Television License is NOT included.');
+        pdfDoc.fontSize(9).text('all utilities including, gas, electric, water, basic internet.');
+        pdfDoc.fontSize(10).text('Excluded Utility Cost:', { underline: true, continued: true });
+        pdfDoc.fontSize(9).text(' Television License is not included, if the lodger would like to view any LIVE broadcast, the lodger accepts responsibility to pay for the television licence and provide evidence of the purchase at their own expense (bbc iplayer etc)');
+        pdfDoc.fontSize(9).text('Any Utilities not listed as payable by the Lodger in Part 3 of this agreement are included in the Accommodation Payment.');
+        pdfDoc.fontSize(9).text('Note: The Householder may not require the Lodger to pay any charge which is not a permitted payment under the Tenant Fees Act 2019.');
         pdfDoc.moveDown();
 
         // Add new page for terms
@@ -770,74 +806,108 @@ app.post('/api/tenancies/:id/approve', authenticateToken, requireRole('landlord'
         // Section 1
         pdfDoc.fontSize(10).text('1. About the Licence to Occupy a Room in the Property', { underline: true });
         pdfDoc.fontSize(8);
-        pdfDoc.text('1.1. The Householder permits the Lodger to occupy the Room until either party ends the arrangement as provided for under clause 9.');
-        pdfDoc.text('1.2. The Lodger will occupy the Room personally and shall not share with any other person without written consent.');
-        pdfDoc.text('1.3. The Lodger shall have use of the Contents in the Room, an inventory of which will be prepared by the Householder.');
-        pdfDoc.text('1.4. The Lodger may use the Shared Areas in common with the Householder.');
-        pdfDoc.text('1.5. This agreement is NOT intended to confer exclusive possession upon the Lodger nor to create landlord/tenant relationship.');
-        pdfDoc.text('1.6. This agreement is personal to the Lodger and cannot be assigned to any other party.');
-        pdfDoc.text('1.7. The Lodger must maintain "Right to Rent" as defined by the Immigration Act 2014 at all times.');
+        pdfDoc.text('1.1. The Householder permits the Lodger to occupy the Room until either party ends the arrangement as provided for under clause 9 of this agreement.');
+        pdfDoc.text('1.2. The Lodger will occupy the Room personally and shall not share the Room with any other person, except where the Lodger has asked to share the Room with another person and the Householder has agreed in writing (in Part 3: Property Rules and Services and Any Additional Terms) that this person (the "Permitted Occupier") may occupy the Room with Lodger during the Term.');
+        pdfDoc.text('1.3. The Lodger shall have use of the Contents in the Room, an inventory of which will be prepared by the Householder and provided to the Lodger.');
+        pdfDoc.text('1.4. The Lodger may use the facilities of the Shared Areas of the Property in common with the Householder (and the other Lodgers of the Householder) but only in conjunction with their occupation of the Room under this agreement.');
+        pdfDoc.text('1.5. This agreement is not intended to confer exclusive possession upon the Lodger nor to create the relationship of landlord and tenant between the parties. The Lodger shall not be entitled to an assured tenancy or a statutory periodic tenancy under the Housing Act 1988 or any other statutory security of tenure now or when the licence ends.');
+        pdfDoc.text('1.6. This agreement is personal to the Lodger, cannot be assigned to any other party, and can be terminated by either party on notice or without notice in the case of serious breaches of the agreement.');
+        pdfDoc.text('1.7. It is a condition of this agreement that the Lodger maintain a "Right to Rent" as defined by the Immigration Act 2014 at all times during the Term.');
         pdfDoc.moveDown();
 
         // Section 2
         pdfDoc.fontSize(10).text('2. Lodger Obligations', { underline: true });
+        pdfDoc.fontSize(9).text('The Lodger Agrees with the Householder:');
         pdfDoc.fontSize(8);
-        pdfDoc.text('2.1. Payments: To pay the Accommodation Payment at the times specified. To pay 3% interest above Bank of England base rate for late payments (14+ days).');
-        pdfDoc.text('2.2. Utilities: To make only reasonable use of Utilities consistent with ordinary residential use.');
-        pdfDoc.text('2.3. Use: Not to use the Room other than as a private residence. Occasional overnight visitors allowed with prior permission.');
-        pdfDoc.text('2.4. Maintenance: Keep the Room and Shared Parts in good and clean condition. Make good any damage to Contents.');
-        pdfDoc.text('2.5. Activities: Not to smoke inside (outside only). Cook only in kitchen. No pets without consent. No alterations without consent. Not to cause nuisance. Clean Room weekly and dispose of rubbish daily.');
-        pdfDoc.text('2.6. Other: Comply with Right to Rent checks. Assist with Council Tax applications if applicable.');
-        pdfDoc.text('2.7. End of Agreement: Vacate and leave in clean condition (fair wear and tear excepted). Return all keys. Provide forwarding address.');
+        pdfDoc.text('2.1. Payments');
+        pdfDoc.text('  2.1.1. To pay the Accommodation Payment at the times and in the manner set out above.');
+        pdfDoc.text('  2.1.2. To pay simple interest at the rate of 3% above the Bank of England base rate upon any payment which is not paid within 14 days after the due date.');
+        pdfDoc.text('2.2. Utilities - To make only reasonable use of the Utilities consistent with ordinary residential use.');
+        pdfDoc.text('2.3. Use of the Property');
+        pdfDoc.text('  2.3.1. Not to use or occupy the Room in any way whatsoever other than as a private residence;');
+        pdfDoc.text('  2.3.2. Not to let or share any rooms or take in any lodger without consent. Occasional overnight visitors allowed with prior permission.');
+        pdfDoc.text('2.4. Maintenance');
+        pdfDoc.text('  2.4.1. To keep the interior of the Room and Shared Parts in good and clean condition and make good any damage.');
+        pdfDoc.text('  2.4.2. To keep the Contents in good condition and not remove any articles from the Room.');
+        pdfDoc.text('  2.4.3. To replace damaged items with articles of similar kind and value.');
+        pdfDoc.text('2.5. Activities at the Property');
+        pdfDoc.text('  2.5.1. Not to smoke cigarettes, cigars, pipes or any other substances in the Property only outside.');
+        pdfDoc.text('  2.5.2. To cook at the Property only in the kitchen;');
+        pdfDoc.text('  2.5.3. Not to keep any pet without prior consent;');
+        pdfDoc.text('  2.5.4. Not to make any alteration without prior written consent;');
+        pdfDoc.text('  2.5.5. Not do anything which may be a nuisance or prejudice insurance;');
+        pdfDoc.text('  2.5.6. To ensure Room cleaned weekly and rubbish disposed of daily.');
+        pdfDoc.text('2.6. Other Obligations - Comply with Right to Rent checks. Assist with Council Tax discounts/exemptions.');
+        pdfDoc.text('2.7. At the end of the Agreement - Vacate and leave in clean condition (fair wear and tear excepted). Return all keys. Provide forwarding address. Remove all personal items.');
         pdfDoc.moveDown();
 
         // Section 3
         pdfDoc.fontSize(10).text('3. Householder Obligations', { underline: true });
+        pdfDoc.fontSize(9).text('The Householder agrees with the Lodger:');
         pdfDoc.fontSize(8);
-        pdfDoc.text('3.1. Keep in good repair structure, exterior, drains, gutters and installations for water, gas, electricity, sanitation, heating.');
-        pdfDoc.text('3.2. Keep in good repair fixtures and fittings provided for Lodger use.');
-        pdfDoc.text('3.3. Comply with Gas Safety Regulations 1998 - annual gas appliance checks by Gas Safe-registered installer.');
-        pdfDoc.text('3.4. Ensure furniture complies with Fire Safety Regulations 1988.');
-        pdfDoc.text('3.5. Ensure all electrical equipment is kept in good repair.');
-        pdfDoc.text('3.6. Install and maintain smoke detectors and carbon monoxide detectors.');
-        pdfDoc.text('3.7. Ensure Room and Shared Areas are fit for human habitation.');
-        pdfDoc.text('3.8. Pay the Council Tax for the Property during the Term.');
+        pdfDoc.text('3.1. To keep in good repair the structure and exterior of the Property and the Room (including drains gutters and external pipes) and to keep in repair and proper working order the installations (if any) in the Property for the supply of water gas and electricity and for sanitation (including basins sinks and sanitary conveniences but not the fixtures, fittings, and appliances for making use of water gas or electricity) and for space heating and heating water');
+        pdfDoc.text('  provided that the Householder is not required:');
+        pdfDoc.text('    3.1.1. to carry out any works or repairs for which the Lodger is liable, or');
+        pdfDoc.text('    3.1.2. to rebuild or reinstate the Property in the case of destruction or damage by fire by tempest flood or other inevitable accident, or');
+        pdfDoc.text('    3.1.3. to keep in repair or maintain anything which the Lodger is entitled to remove from the Property.');
+        pdfDoc.text('3.2. To keep in good repair and working order such fixtures and fittings as are provided by the Householder for use by the Lodger');
+        pdfDoc.text('3.3. To comply with the Gas Safety (Installation and Use) Regulations 1998 (as amended) by ensuring that all gas appliances in the Property are checked by a Gas Safe-registered installer on an annual basis');
+        pdfDoc.text('3.4. To ensure that all furniture and furnishings provided for use by the Lodger complies with the Furniture and Furnishings (Fire)(Safety) Regulations, 1988 (as amended).');
+        pdfDoc.text('3.5. To ensure that all electrical equipment supplied to the Lodger is kept in good repair and is not damaged or defective.');
+        pdfDoc.text('3.6. To install and keep in good working order smoke detectors in the Property, and, if there is a fixed combustion appliance in any part of the Property, to install and keep in good working order a carbon monoxide detector.');
+        pdfDoc.text('3.7. To ensure that all times the Room and the Shared Areas are fit for human habitation.');
+        pdfDoc.text('3.8. To pay the Council Tax for the Property during the Term.');
+        pdfDoc.text('3.9. To warrant that they have permission to take in lodgers in the Property.');
         pdfDoc.moveDown();
 
         // Sections 4-8
         pdfDoc.fontSize(10).text('4. Amicable Sharing', { underline: true });
-        pdfDoc.fontSize(8).text('The Lodger shall use best efforts to share the Room and Property amicably. Both parties will respect privacy and decency. Nothing grants exclusive possession.');
+        pdfDoc.fontSize(8);
+        pdfDoc.text('4.1. The Lodger shall use his or her best efforts to share the use of the Room and Property amicably and peaceably with the Householder (and the Property with such other Lodgers as the Householder shall from time to time permit to use the Property). The Lodger shall not interfere with or otherwise obstruct such shared occupation in any way.');
+        pdfDoc.text('4.2. The Householder and the Lodger will respect each other\'s reasonable needs for privacy and decency. Neither party will exercise their rights of access to any room in a way that is likely to violate such reasonable needs. Nothing in this clause is intended to grant the Lodger exclusive possession of the Room or any other part of the Property.');
         pdfDoc.moveDown(0.5);
 
         pdfDoc.fontSize(10).text('5. Keys', { underline: true });
-        pdfDoc.fontSize(8).text('The Householder shall give the Lodger one set of keys. The Lodger will keep safe any keys. The Householder retains their own keys and may obtain free entry at any reasonable time.');
+        pdfDoc.fontSize(8);
+        pdfDoc.text('5.1. The Householder shall give the Lodger one set of keys to the Room (if applicable) and to the Property.');
+        pdfDoc.text('5.2. The Lodger will keep safe any keys or other security devices giving access to the Property or to the Room, and will pay the Householder\'s reasonable costs incurred in consequence of the loss of any such key, or other such device.');
+        pdfDoc.text('5.3. The Householder shall retain his or her own set of keys and the Householder and any persons authorised by him or her may exercise their right to use these and obtain free entry to the Room at any reasonable time.');
         pdfDoc.moveDown(0.5);
 
-        pdfDoc.fontSize(10).text('6. Deposit', { underline: true });
-        pdfDoc.fontSize(8).text('The Deposit will be held by the Householder during the Term. No interest payable. NOT required to be protected. At end of Term will be refunded less any reasonable deductions. Repaid within one month except exceptional circumstances.');
+        pdfDoc.fontSize(10).text('6. Deposit if applicable', { underline: true });
+        pdfDoc.fontSize(8);
+        pdfDoc.text('6.1. The Deposit will be held by the Householder during the Term. No interest will be payable by the Householder to the Lodger in respect of the deposit money.');
+        pdfDoc.text('6.2. The Householder is not required to protect the Deposit with a Government approved protection scheme.');
+        pdfDoc.text('6.3. At the end of the Term (however it ends) on giving vacant possession of the Room to the Householder the Deposit shall will be refunded to the Lodger but less any reasonable deductions properly made by the Householder to cover any reasonable costs incurred by or losses caused to him by any breaches of the Lodger\'s obligations under this Agreement.');
+        pdfDoc.text('6.4. The Deposit shall be repaid to the Lodger, at the forwarding address provided to the Householder, as soon as reasonably practicable. The Householder shall not except where they can demonstrate exceptional circumstances retain the Deposit for more than one month.');
         pdfDoc.moveDown(0.5);
 
         pdfDoc.fontSize(10).text('7. Uninhabitability', { underline: true });
-        pdfDoc.fontSize(8).text('If destruction or damage makes Property uninhabitable, Lodger relieved from making Payment proportionate to extent prevented from living in Property (unless caused by Lodger).');
+        pdfDoc.fontSize(8).text('7.1. In the event of destruction to the Property or of damage to it which shall make the same or a substantial portion of the same uninhabitable, the Lodger shall be relieved from making the Payment by an amount proportionate to the extent to which the Lodger\'s ability to live in the Property is thereby prevented, save where the destruction or damage has been caused by any act or default by the Lodger or where the Householder\'s insurance cover has been adversely affected by any act or omission on the part of the Lodger.');
         pdfDoc.moveDown(0.5);
 
-        pdfDoc.fontSize(10).text('8. Moving to Another Room', { underline: true });
-        pdfDoc.fontSize(8).text('The Householder may give written notice directing Lodger to use another room of similar size and condition. Minimum 48 hours notice.');
+        pdfDoc.fontSize(10).text('8. Moving to another room', { underline: true });
+        pdfDoc.fontSize(8);
+        pdfDoc.text('8.1. The Householder may give reasonable written notice directing the Lodger to use another room of similar size and condition to the Room in the Property. If such notice is given the Lodger must remove his or her personal belongings to the new room and must leave the old room in a clean and tidy condition.');
+        pdfDoc.text('8.2. Notice to use another room in the Property must give the Lodger a minimum of 48 hours to move or an amount of time which is reasonable in the circumstances, whichever is longer.');
         pdfDoc.moveDown();
 
         // Section 9 - Ending Agreement
         pdfDoc.fontSize(10).text('9. Ending this Agreement', { underline: true });
         pdfDoc.fontSize(8);
-        pdfDoc.text('9.1. Termination for Breach: If Lodger breaches any term, or payments 14+ days late, or declared bankrupt, Householder may give 7 days notice to remedy. If not remedied after 7 days, landlord may terminate with further 14 days notice.');
-        pdfDoc.text('9.2. Break Clause: Either party may terminate by giving one calendar month written notice expiring day before a Payment Day.');
-        pdfDoc.text('9.3. Behaviour Clause: If behaviour unacceptable, Householder will provide written warning. If not corrected, may terminate with maximum 14 days notice (immediate for aggressive behaviour).');
-        pdfDoc.text('9.4. At end, Lodger must remove all items. Items left behind (except perishable food) stored for 14 days then disposed of.');
+        pdfDoc.text('9.1. Termination for breach of this Agreement: If at any time during the Term the Lodger is in breach of any term of this agreement, or any sums due under this agreement are more than 14 days late, or if the Lodger is declared bankrupt or enters into any form of arrangement with his creditors, the Householder may terminate this agreement by giving 7 days\' notice to the Lodger in writing to remedy the breach. If after 7 days the breach has not been remedied the landlord may terminate this agreement by giving a further 14 days\' notice in writing to the Lodger.');
+        pdfDoc.text('9.2. Break Clause: Either party may at any time during the Term terminate this Agreement by giving to the other prior written notice of not less than one calendar month expiring the day before a Payment Day. Upon the expiry of that notice this Agreement shall end with no further liability for either party except for any existing breaches.');
+        pdfDoc.text('9.3. Behaviour Clause: If the householder deems that the behaviour of the tenant is unacceptable, the householder will provide in writing a warning notice of this breach, if the tenant fails to correct this behaviour the householder may terminate the contract with a maximum of 14 days notice, depending on the severity of the behaviour, for example aggressive behavior, the contract may be terminated with immediate effect.');
+        pdfDoc.text('9.4. At the end of the agreement any items remaining in the Property or Room which are the property of the Lodger must be removed by the Lodger. If any items (apart from perishable food) are left behind by the Lodger the Householder will make reasonable efforts to notify the Lodger and will store them for a period of 14 days, after which time the Householder will be permitted to dispose of the items as they see fit.');
         pdfDoc.moveDown();
 
         // Section 10
-        pdfDoc.fontSize(10).text('10. About the Legal Effect of this Agreement', { underline: true });
-        pdfDoc.fontSize(8).text('If any term is illegal or unenforceable, that term shall be deemed not to form part and remainder not affected. This agreement governed by laws of England and Wales. Embodies entire understanding between parties.');
-        pdfDoc.moveDown(2);
+        pdfDoc.fontSize(10).text('10. About the Legal Effect of this agreement', { underline: true });
+        pdfDoc.fontSize(8);
+        pdfDoc.text('10.1. If any term of this agreement is, in whole or in part, held to be illegal or unenforceable to any extent under any enactment or rule of law, that term or part shall to that extent be deemed not to form part of this agreement and the enforceability of the remainder of this agreement shall not be affected.');
+        pdfDoc.text('10.2. The Householder and the Lodger agree that this agreement shall be exclusively governed by and interpreted in accordance with the laws of England and Wales, and agree to submit to the exclusive jurisdiction of the English Courts.');
+        pdfDoc.text('10.3. This agreement including the attached Property Rules and Services in Part 3 embody the entire understanding of the parties relating to the Room and the Property and to all matters dealt with by any of the provisions in this agreement.');
+        pdfDoc.moveDown();
 
         // SIGNATURES
         pdfDoc.fontSize(12).text('SIGNATURES', { underline: true });
@@ -968,17 +1038,126 @@ app.post('/api/payments/:id/confirm', authenticateToken, requireRole('landlord',
 app.get('/api/tenancies/:id/payment-summary', authenticateToken, async (req, res) => {
     try {
         const { id } = req.params;
-        
+
         const result = await pool.query(
             'SELECT * FROM payment_schedule WHERE tenancy_id = $1 ORDER BY payment_number',
             [id]
         );
-        
+
         const summary = paymentCalculator.generatePaymentSummary(result.rows);
         res.json(summary);
     } catch (error) {
         console.error('Get payment summary error:', error);
         res.status(500).json({ error: 'Failed to get payment summary' });
+    }
+});
+
+// Get all payments for landlord
+app.get('/api/payments', authenticateToken, async (req, res) => {
+    try {
+        if (req.user.user_type === 'landlord' || req.user.user_type === 'admin') {
+            // Get all payments for landlord's tenancies
+            const result = await pool.query(
+                `SELECT ps.*, t.property_address, u.full_name as lodger_name
+                 FROM payment_schedule ps
+                 JOIN tenancies t ON ps.tenancy_id = t.id
+                 JOIN users u ON t.lodger_id = u.id
+                 WHERE t.landlord_id = $1
+                 ORDER BY ps.due_date DESC`,
+                [req.user.id]
+            );
+            res.json(result.rows);
+        } else if (req.user.user_type === 'lodger') {
+            // Get payments for lodger's tenancy
+            const result = await pool.query(
+                `SELECT ps.*, t.property_address
+                 FROM payment_schedule ps
+                 JOIN tenancies t ON ps.tenancy_id = t.id
+                 WHERE t.lodger_id = $1
+                 ORDER BY ps.due_date DESC`,
+                [req.user.id]
+            );
+            res.json(result.rows);
+        } else {
+            res.status(403).json({ error: 'Unauthorized' });
+        }
+    } catch (error) {
+        console.error('Get payments error:', error);
+        res.status(500).json({ error: 'Failed to get payments' });
+    }
+});
+
+// ============================================
+// NOTIFICATION ROUTES
+// ============================================
+
+// Get notifications for user
+app.get('/api/notifications', authenticateToken, async (req, res) => {
+    try {
+        // For now, return empty array - can be implemented later
+        res.json([]);
+    } catch (error) {
+        console.error('Get notifications error:', error);
+        res.status(500).json({ error: 'Failed to get notifications' });
+    }
+});
+
+// ============================================
+// DASHBOARD ROUTES
+// ============================================
+
+// Get landlord dashboard stats
+app.get('/api/dashboard/landlord', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+    try {
+        const landlordId = req.user.id;
+
+        // Get tenancy counts
+        const tenancyStats = await pool.query(
+            `SELECT
+                COUNT(*) as total_tenancies,
+                COUNT(*) FILTER (WHERE status = 'active') as active_tenancies,
+                COUNT(*) FILTER (WHERE status = 'pending') as pending_tenancies,
+                COUNT(*) FILTER (WHERE status = 'notice_given') as notice_tenancies
+             FROM tenancies
+             WHERE landlord_id = $1`,
+            [landlordId]
+        );
+
+        // Get payment stats
+        const paymentStats = await pool.query(
+            `SELECT
+                COUNT(*) as total_payments,
+                COUNT(*) FILTER (WHERE payment_status = 'paid') as paid_payments,
+                COUNT(*) FILTER (WHERE payment_status = 'pending') as pending_payments,
+                COUNT(*) FILTER (WHERE payment_status = 'submitted') as submitted_payments,
+                COUNT(*) FILTER (WHERE payment_status = 'overdue') as overdue_payments,
+                SUM(rent_due) as total_rent_due,
+                SUM(rent_paid) as total_rent_paid
+             FROM payment_schedule ps
+             JOIN tenancies t ON ps.tenancy_id = t.id
+             WHERE t.landlord_id = $1`,
+            [landlordId]
+        );
+
+        // Get upcoming payments (next 30 days)
+        const upcomingPayments = await pool.query(
+            `SELECT COUNT(*) as upcoming_count
+             FROM payment_schedule ps
+             JOIN tenancies t ON ps.tenancy_id = t.id
+             WHERE t.landlord_id = $1
+             AND ps.payment_status != 'paid'
+             AND ps.due_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '30 days'`,
+            [landlordId]
+        );
+
+        res.json({
+            tenancies: tenancyStats.rows[0],
+            payments: paymentStats.rows[0],
+            upcoming: upcomingPayments.rows[0]
+        });
+    } catch (error) {
+        console.error('Get dashboard stats error:', error);
+        res.status(500).json({ error: 'Failed to get dashboard stats' });
     }
 });
 
@@ -1253,6 +1432,240 @@ app.get('/api/health', (req, res) => {
         timestamp: new Date().toISOString(),
         version: '1.0.0'
     });
+});
+
+// ============================================
+// BACKUP & RESTORE ROUTES
+// ============================================
+
+// Backup database
+app.get('/api/backup', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+    try {
+        const landlordId = req.user.id;
+
+        // Get all data for this landlord
+        const backup = {
+            version: '1.0',
+            timestamp: new Date().toISOString(),
+            landlord_id: landlordId,
+            data: {}
+        };
+
+        // Get user profile
+        const userResult = await pool.query(
+            'SELECT id, email, full_name, phone, address, bank_account_number, bank_sort_code, payment_reference FROM users WHERE id = $1',
+            [landlordId]
+        );
+        backup.data.profile = userResult.rows[0];
+
+        // Get all tenancies
+        const tenanciesResult = await pool.query(
+            `SELECT t.*, u.full_name as lodger_name, u.email as lodger_email, u.phone as lodger_phone
+             FROM tenancies t
+             LEFT JOIN users u ON t.lodger_id = u.id
+             WHERE t.landlord_id = $1
+             ORDER BY t.created_at DESC`,
+            [landlordId]
+        );
+        backup.data.tenancies = tenanciesResult.rows;
+
+        // Get all payment schedules for landlord's tenancies
+        const paymentResult = await pool.query(
+            `SELECT ps.*
+             FROM payment_schedule ps
+             JOIN tenancies t ON ps.tenancy_id = t.id
+             WHERE t.landlord_id = $1
+             ORDER BY ps.due_date DESC`,
+            [landlordId]
+        );
+        backup.data.payments = paymentResult.rows;
+
+        // Get all notices
+        const noticesResult = await pool.query(
+            `SELECT n.*
+             FROM notices n
+             JOIN tenancies t ON n.tenancy_id = t.id
+             WHERE t.landlord_id = $1
+             ORDER BY n.notice_date DESC`,
+            [landlordId]
+        );
+        backup.data.notices = noticesResult.rows;
+
+        // Get all lodgers
+        const lodgersResult = await pool.query(
+            `SELECT DISTINCT u.id, u.email, u.full_name, u.phone, u.created_at
+             FROM users u
+             JOIN tenancies t ON u.id = t.lodger_id
+             WHERE t.landlord_id = $1`,
+            [landlordId]
+        );
+        backup.data.lodgers = lodgersResult.rows;
+
+        // Set headers for file download
+        const filename = `lodger-backup-${new Date().toISOString().split('T')[0]}.json`;
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
+        res.json(backup);
+    } catch (error) {
+        console.error('Backup error:', error);
+        res.status(500).json({ error: 'Failed to create backup' });
+    }
+});
+
+// Restore database from backup
+app.post('/api/restore', authenticateToken, requireRole('landlord', 'admin'), upload.single('backup'), async (req, res) => {
+    try {
+        if (!req.file) {
+            return res.status(400).json({ error: 'No backup file provided' });
+        }
+
+        // Read and parse the backup file
+        const fs = require('fs');
+        const backupData = JSON.parse(fs.readFileSync(req.file.path, 'utf8'));
+
+        // Validate backup format
+        if (!backupData.version || !backupData.data) {
+            return res.status(400).json({ error: 'Invalid backup file format' });
+        }
+
+        // Verify this backup belongs to the current user
+        if (backupData.landlord_id !== req.user.id) {
+            return res.status(403).json({ error: 'This backup belongs to a different user' });
+        }
+
+        const client = await pool.connect();
+
+        try {
+            await client.query('BEGIN');
+
+            // Restore user profile (only specific fields)
+            if (backupData.data.profile) {
+                await client.query(
+                    `UPDATE users
+                     SET full_name = $1, phone = $2, address = $3,
+                         bank_account_number = $4, bank_sort_code = $5, payment_reference = $6
+                     WHERE id = $7`,
+                    [
+                        backupData.data.profile.full_name,
+                        backupData.data.profile.phone,
+                        backupData.data.profile.address,
+                        backupData.data.profile.bank_account_number,
+                        backupData.data.profile.bank_sort_code,
+                        backupData.data.profile.payment_reference,
+                        req.user.id
+                    ]
+                );
+            }
+
+            await client.query('COMMIT');
+
+            // Clean up uploaded file
+            fs.unlinkSync(req.file.path);
+
+            res.json({
+                message: 'Profile restored successfully',
+                note: 'Only profile settings were restored. Tenancy and payment data restoration requires manual database operations for safety.'
+            });
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            throw error;
+        } finally {
+            client.release();
+        }
+
+    } catch (error) {
+        console.error('Restore error:', error);
+        res.status(500).json({ error: 'Failed to restore backup: ' + error.message });
+    }
+});
+
+// Factory Reset (Admin only)
+app.post('/api/factory-reset', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { password } = req.body;
+
+        if (!password) {
+            return res.status(400).json({ error: 'Password is required' });
+        }
+
+        // Verify admin password
+        const userResult = await pool.query(
+            'SELECT password_hash FROM users WHERE id = $1',
+            [req.user.id]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const isValidPassword = await bcrypt.compare(password, userResult.rows[0].password_hash);
+        if (!isValidPassword) {
+            return res.status(401).json({ error: 'Invalid password' });
+        }
+
+        const client = await pool.connect();
+
+        try {
+            await client.query('BEGIN');
+
+            // Get the admin user ID to preserve
+            const adminId = req.user.id;
+
+            // Delete all data EXCEPT the admin user
+            console.log('Starting factory reset...');
+
+            // Delete payment schedules first (foreign key constraint)
+            await client.query('DELETE FROM payment_schedule');
+            console.log('✓ Deleted payment schedules');
+
+            // Delete notices
+            await client.query('DELETE FROM notices');
+            console.log('✓ Deleted notices');
+
+            // Delete tenancies
+            await client.query('DELETE FROM tenancies');
+            console.log('✓ Deleted tenancies');
+
+            // Delete all users except admin
+            await client.query('DELETE FROM users WHERE id != $1', [adminId]);
+            console.log('✓ Deleted all users except admin');
+
+            // Reset admin profile to defaults (keep email and password)
+            await client.query(
+                `UPDATE users
+                 SET full_name = 'Admin User',
+                     phone = NULL,
+                     address = NULL,
+                     bank_account_number = NULL,
+                     bank_sort_code = NULL,
+                     payment_reference = NULL
+                 WHERE id = $1`,
+                [adminId]
+            );
+            console.log('✓ Reset admin profile');
+
+            await client.query('COMMIT');
+            console.log('✓ Factory reset completed successfully');
+
+            res.json({
+                message: 'Factory reset completed successfully',
+                note: 'All data has been deleted except your admin account. Please log out and log back in.'
+            });
+
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Factory reset rollback:', error);
+            throw error;
+        } finally {
+            client.release();
+        }
+
+    } catch (error) {
+        console.error('Factory reset error:', error);
+        res.status(500).json({ error: 'Failed to perform factory reset: ' + error.message });
+    }
 });
 
 // ============================================
