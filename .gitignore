@@ -1,0 +1,91 @@
+# Environment Variables
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build outputs
+/frontend/build
+/frontend/dist
+/backend/dist
+
+# Upload directories
+uploads/
+/backend/uploads/*
+!/backend/uploads/.gitkeep
+
+# Backup files
+backups/
+/backend/backups/*
+!/backend/backups/.gitkeep
+
+# Database files
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+coverage/
+.nyc_output/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Docker volumes
+postgres_data/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Lock files (commit package-lock.json but ignore yarn.lock if not using yarn)
+# yarn.lock
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+
+# Backups
+*.backup
+*.bak
+
+# Compressed files
+*.zip
+*.tar.gz
+*.rar
