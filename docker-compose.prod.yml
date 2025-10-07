@@ -25,7 +25,9 @@ services:
       - lodger_network
 
   backend:
-    image: nowkillkennys/lodger-manager-backend:latest
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: lodger_backend
     env_file:
       - backend/.env
@@ -54,7 +56,9 @@ services:
       - lodger_network
 
   frontend:
-    image: nowkillkennys/lodger-manager-frontend:latest
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     container_name: lodger_frontend
     environment:
       REACT_APP_API_URL: "/api"
