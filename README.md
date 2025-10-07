@@ -2,11 +2,13 @@
 
 A comprehensive, production-ready property management system for UK landlords and lodgers with flexible payment cycles, automated PDF agreements, and complete tenant/landlord portals.
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Version](https://img.shields.io/badge/version-1.1.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)
 ![React](https://img.shields.io/badge/react-18.2.0-blue)
 ![Docker](https://img.shields.io/badge/docker-ready-blue)
+![Docker Hub](https://img.shields.io/badge/docker-hub-blue)
+![Portainer](https://img.shields.io/badge/portainer-ready-blue)
 
 ---
 
@@ -653,6 +655,26 @@ docker-compose logs -f
 curl http://localhost:3001/api/health
 ```
 
+### Docker Hub Images
+
+Pre-built images are available on Docker Hub for easy deployment:
+
+```bash
+# Official images (recommended for production)
+docker pull nowkillkennys/lodger-manager-backend:latest
+docker pull nowkillkennys/lodger-manager-frontend:latest
+```
+
+**Image Details:**
+- **Backend:** `nowkillkennys/lodger-manager-backend:latest`
+  - Node.js 20 Alpine with automatic database initialization
+  - Includes PostgreSQL client for health checks
+  - Production-optimized with security headers
+- **Frontend:** `nowkillkennys/lodger-manager-frontend:latest`
+  - Nginx Alpine serving React production build
+  - Multi-stage build for optimal image size
+  - Includes curl for health checks
+
 ### Publishing to Docker Hub
 
 To publish your own version of the images to Docker Hub:
@@ -666,11 +688,11 @@ docker login
 
 # Or manually:
 # Build backend
-docker build -t yourusername/lodger-manager-backend:latest ./backend
+docker build --platform linux/amd64 -t yourusername/lodger-manager-backend:latest ./backend
 docker push yourusername/lodger-manager-backend:latest
 
 # Build frontend
-docker build -t yourusername/lodger-manager-frontend:latest ./frontend
+docker build --platform linux/amd64 -t yourusername/lodger-manager-frontend:latest ./frontend
 docker push yourusername/lodger-manager-frontend:latest
 
 # Update docker-compose.yml to use your images
@@ -680,31 +702,43 @@ docker push yourusername/lodger-manager-frontend:latest
 
 ### Portainer Stack Deployment
 
-For easy GUI deployment using Portainer:
+For easy GUI deployment using Portainer (recommended method):
 
 ```bash
-# 1. Copy the production compose file
-cp docker-compose.prod.yml docker-compose.yml
-
-# 2. Copy and configure environment
-cp .env.example .env
-# Edit .env with your secure passwords
-
-# 3. In Portainer:
-# - Go to Stacks
-# - Create new stack
-# - Upload docker-compose.prod.yml
-# - Add environment variables from .env
+# 1. In Portainer:
+# - Go to Stacks → Add Stack
+# - Name: lodger-management
+# - Repository URL: https://github.com/nowkillkennys/lodger-manger.git
+# - Compose path: docker-compose.prod.yml
+# - Add environment variables (see below)
 # - Deploy the stack
 
-# The stack includes:
-# ✅ PostgreSQL database with health checks
-# ✅ Backend API with published images
-# ✅ Frontend with published images
-# ✅ Nginx reverse proxy (optional)
-# ✅ Proper networking and volumes
-# ✅ Health checks for all services
+# 2. Environment Variables (add in Portainer):
+DB_PASSWORD=your_secure_db_password_here
+JWT_SECRET=your_32_character_jwt_secret_here
+FRONTEND_URL=http://your-server-ip
+HTTP_PORT=80
+HTTPS_PORT=443
+
+# 3. Access your application:
+# http://your-server-ip
+# Setup wizard will guide you through initial configuration
 ```
+
+**Portainer Stack Features:**
+- ✅ **Pre-built Docker Hub images** - No building required
+- ✅ **Automatic database initialization** - Tables created on first run
+- ✅ **Health checks** - All services monitored automatically
+- ✅ **Persistent volumes** - Data survives container restarts
+- ✅ **Nginx reverse proxy** - Load balancing and routing
+- ✅ **Secure networking** - Isolated Docker networks
+- ✅ **Production ready** - Optimized for reliability
+
+**Troubleshooting Portainer Issues:**
+- **"pull access denied"** → Images are public, check internet connection
+- **"no matching manifest"** → Ensure linux/amd64 platform (most servers)
+- **Database connection failed** → Check environment variables match
+- **Setup wizard not showing** → Clear browser cache, check logs
 
 ### Portainer Stack Deployment
 
@@ -1671,11 +1705,43 @@ This project is proprietary software for property management purposes.
 ---
 
 **Version:** 1.1.0
-**Last Updated:** October 6, 2025
+**Last Updated:** October 7, 2025
 **Status:** ✅ Production Ready
+**Docker Hub:** ✅ Images Available
+**Portainer:** ✅ Fully Compatible
+
+---
+
+## 🚀 Latest Updates (v1.1.0)
+
+### ✅ **Docker Hub Integration**
+- Pre-built images available for instant deployment
+- Automatic database initialization on first run
+- Multi-platform support (linux/amd64)
+- Production-optimized containers
+
+### ✅ **Portainer Compatibility**
+- One-click deployment via GitHub repository
+- No manual building required
+- Automatic service discovery and health checks
+- Persistent data management
+
+### ✅ **Enhanced Security**
+- Automatic database initialization with proper permissions
+- Secure environment variable handling
+- PostgreSQL client integration for health checks
+- Production-ready container configurations
+
+### ✅ **Deployment Fixes**
+- Fixed PostgreSQL port configuration (5433)
+- Resolved architecture compatibility issues
+- Added custom entrypoint scripts for initialization
+- Improved error handling and logging
 
 ---
 
 **Ready to manage your lodgers professionally!** 🏠🎉
+
+**Quick Deploy:** Use Portainer with https://github.com/nowkillkennys/lodger-manger.git
 
 For detailed instructions, refer to the sections above or check the troubleshooting guide.
