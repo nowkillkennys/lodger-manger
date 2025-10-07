@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import Login from './components/Login';
 import LandlordDashboard from './components/LandlordDashboard';
 import LodgerDashboard from './components/LodgerDashboard';
+import AdminDashboard from './components/AdminDashboard';
 import SetupWizard from './components/SetupWizard';
 import { API_URL } from './config';
 
@@ -112,7 +113,9 @@ function App() {
     // Logged in - show appropriate dashboard
     return (
         <div className="min-h-screen bg-gray-50">
-            {user.user_type === 'landlord' || user.user_type === 'admin' ? (
+            {user.user_type === 'admin' ? (
+                <AdminDashboard user={user} onLogout={handleLogout} />
+            ) : user.user_type === 'landlord' ? (
                 <LandlordDashboard user={user} token={token} onLogout={handleLogout} />
             ) : (
                 <LodgerDashboard user={user} token={token} onLogout={handleLogout} />

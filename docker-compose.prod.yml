@@ -25,16 +25,19 @@ services:
       - lodger_network
 
   backend:
-    image: nowkillkennys/lodger-manager-backend:latest
+    image: lodger-manager-backend:latest
     container_name: lodger_backend
-    env_file:
-      - backend/.env
     environment:
       NODE_ENV: production
       PORT: 3003
-      DATABASE_URL: postgresql://postgres:${DB_PASSWORD:-changeme123}@postgres:5433/lodger_management
-      JWT_SECRET: ${JWT_SECRET:-your_super_secret_jwt_key_here_minimum_32_characters_long}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      DB_PASSWORD: changeme123
+      DB_HOST: postgres
+      DB_PORT: 5433
+      DB_USER: postgres
+      DB_NAME: lodger_management
+      DATABASE_URL: postgresql://postgres:changeme123@postgres:5433/lodger_management
+      JWT_SECRET: your_super_secret_jwt_key_here_minimum_32_characters_long
+      FRONTEND_URL: http://localhost:3000
     volumes:
       - uploads_data:/app/uploads
       - backups_data:/app/backups
@@ -54,7 +57,7 @@ services:
       - lodger_network
 
   frontend:
-    image: nowkillkennys/lodger-manager-frontend:latest
+    image: lodger-manager-frontend:latest
     container_name: lodger_frontend
     environment:
       REACT_APP_API_URL: "/api"

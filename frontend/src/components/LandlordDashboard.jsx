@@ -313,6 +313,12 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
   const [deductions, setDeductions] = useState([]);
   const [landlordProfile, setLandlordProfile] = useState(null);
   const [confirmText, setConfirmText] = useState('');
+  const [resetRequests, setResetRequests] = useState([]);
+  const [showResetRequestModal, setShowResetRequestModal] = useState(false);
+  const [resetRequestForm, setResetRequestForm] = useState({
+    request_type: 'forgot_password',
+    details: ''
+  });
   console.log('LandlordDashboard all hooks initialized');
 
   useEffect(() => {
@@ -443,6 +449,35 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
     }
   };
 
+  const fetchResetRequests = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/api/reset-requests`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setResetRequests(response.data);
+    } catch (error) {
+      console.error('Failed to fetch reset requests:', error);
+    }
+  };
+
+  const handleSubmitResetRequest = async (e) => {
+    e.preventDefault();
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${API_URL}/api/reset-requests`, resetRequestForm, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      alert('Reset request submitted successfully! An administrator will review your request.');
+      setShowResetRequestModal(false);
+      setResetRequestForm({ request_type: 'forgot_password', details: '' });
+      fetchResetRequests(); // Refresh the list
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to submit reset request');
+    }
+  };
+
   const handleCreateLodger = async (e) => {
     e.preventDefault();
     try {
@@ -514,7 +549,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
         initial_payment: '',
         deposit_applicable: false,
         deposit_amount: '',
-        payment_type: 'cycle_based',
+        payment_type: 'cycle',
         payment_frequency: '4-weekly',
         payment_day_of_month: 1,
         shared_areas: {
@@ -707,21 +742,16 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
     try {
       const token = localStorage.getItem('token');
 
-      // Combine address fields into a single string
-      const combineAddress = (form) => {
-        const parts = [];
-        if (form.house_number?.trim()) parts.push(form.house_number.trim());
-        if (form.street_name?.trim()) parts.push(form.street_name.trim());
-        const streetLine = parts.join(' ');
-
-        const cityParts = [form.city?.trim(), form.county?.trim(), form.postcode?.trim()].filter(Boolean);
-
-        return [streetLine, ...cityParts].filter(Boolean).join(', ');
-      };
-
-      const combinedAddress = combineAddress(profileForm);
+      // Send individual address fields to backend
       const { house_number, street_name, city, county, postcode, ...formData } = profileForm;
-      const dataToSend = { ...formData, address: combinedAddress };
+      const dataToSend = {
+        ...formData,
+        house_number,
+        street_name,
+        city,
+        county,
+        postcode
+      };
 
       const response = await axios.put(`${API_URL}/api/users/profile`, dataToSend, {
         headers: { Authorization: `Bearer ${token}` }
@@ -731,16 +761,15 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
       setLandlordProfile(response.data);
 
       // Update profileForm to reflect the saved changes
-      const address = response.data.address || {};
       setProfileForm({
         full_name: response.data.full_name || '',
         email: response.data.email || '',
         phone: response.data.phone || '',
-        house_number: address.house_number || '',
-        street_name: address.street_name || '',
-        city: address.city || '',
-        county: address.county || '',
-        postcode: address.postcode || '',
+        house_number: response.data.house_number || '',
+        street_name: response.data.street_name || '',
+        city: response.data.city || '',
+        county: response.data.county || '',
+        postcode: response.data.postcode || '',
         rooms: response.data.rooms || [],
         bank_account_number: response.data.bank_account_number || '',
         bank_sort_code: response.data.bank_sort_code || '',
@@ -1144,7 +1173,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200">
           <nav className="flex gap-8">
-            {['overview', 'lodgers', 'tenancies', 'payments', 'calendar', 'profile', 'settings'].map((tab) => (
+            {['overview', 'lodgers', 'tenancies', 'payments', 'calendar', 'profile', 'support', 'settings'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -1850,8 +1879,8 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                         <input
                           type="radio"
                           name="payment_type"
-                          value="cycle_based"
-                          checked={newTenancy.payment_type === 'cycle_based'}
+                          value="cycle"
+                          checked={newTenancy.payment_type === 'cycle'}
                           onChange={(e) => setNewTenancy({...newTenancy, payment_type: e.target.value})}
                           className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                         />
@@ -1864,8 +1893,8 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                         <input
                           type="radio"
                           name="payment_type"
-                          value="calendar_based"
-                          checked={newTenancy.payment_type === 'calendar_based'}
+                          value="calendar"
+                          checked={newTenancy.payment_type === 'calendar'}
                           onChange={(e) => setNewTenancy({...newTenancy, payment_type: e.target.value})}
                           className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                         />
@@ -1878,7 +1907,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                   </div>
 
                   {/* Conditional Payment Fields */}
-                  {newTenancy.payment_type === 'cycle_based' ? (
+                  {newTenancy.payment_type === 'cycle' ? (
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Payment Frequency *</label>
                       <select
@@ -1970,7 +1999,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                           initial_payment: '',
                           deposit_applicable: false,
                           deposit_amount: '',
-                          payment_type: 'cycle_based',
+                          payment_type: 'cycle',
                           payment_frequency: '4-weekly',
                           payment_day_of_month: 1,
                           shared_areas: {
@@ -2489,6 +2518,95 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
             </div>
         )}
 
+        {/* Support Tab */}
+        {activeTab === 'support' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold">Account Support</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Get help with account issues and password resets
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowResetRequestModal(true);
+                  fetchResetRequests(); // Refresh requests when opening modal
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+              >
+                <Plus className="w-5 h-5" />
+                Submit Reset Request
+              </button>
+            </div>
+
+            {/* Your Reset Requests */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Your Reset Requests</h3>
+              {resetRequests.length > 0 ? (
+                <div className="space-y-3">
+                  {resetRequests.map((request) => (
+                    <div key={request.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <h4 className="font-medium capitalize">{request.request_type.replace('_', ' ')}</h4>
+                          <p className="text-sm text-gray-600">
+                            Submitted: {new Date(request.created_at).toLocaleDateString('en-GB')}
+                          </p>
+                        </div>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          request.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+                          request.status === 'completed' ? 'bg-green-100 text-green-700' :
+                          request.status === 'denied' ? 'bg-red-100 text-red-700' :
+                          'bg-gray-100 text-gray-700'
+                        }`}>
+                          {request.status}
+                        </span>
+                      </div>
+
+                      {request.details && (
+                        <p className="text-sm text-gray-700 mb-2">{request.details}</p>
+                      )}
+
+                      {request.admin_response && (
+                        <div className="bg-blue-50 border border-blue-200 rounded p-3">
+                          <p className="text-sm font-medium text-blue-900 mb-1">Admin Response:</p>
+                          <p className="text-sm text-blue-800">{request.admin_response}</p>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-4">No reset requests submitted yet</p>
+              )}
+            </div>
+
+            {/* Help Information */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <h3 className="text-lg font-semibold text-blue-900 mb-4">Need Help?</h3>
+              <div className="space-y-3 text-sm text-blue-800">
+                <div>
+                  <h4 className="font-medium mb-1">Forgot Password?</h4>
+                  <p>Submit a password reset request and an administrator will help you regain access to your account.</p>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-1">Account Locked?</h4>
+                  <p>If your account is locked due to too many failed login attempts, submit a reset request for assistance.</p>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-1">Data Issues?</h4>
+                  <p>If you're experiencing data corruption or other account issues, describe the problem in your reset request.</p>
+                </div>
+                <div>
+                  <h4 className="font-medium mb-1">Response Time</h4>
+                  <p>Reset requests are typically processed within 24-48 hours. You'll receive a notification when your request is handled.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Settings Tab */}
         {activeTab === 'settings' && (
           <div className="bg-white rounded-lg shadow p-6">
@@ -2627,6 +2745,74 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
           </div>
         )}
       </div>
+
+      {/* Reset Request Modal */}
+      {showResetRequestModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-indigo-600 text-white px-6 py-4 rounded-t-lg">
+              <h2 className="text-xl font-bold">Submit Reset Request</h2>
+              <p className="text-sm opacity-90 mt-1">Request help with account issues</p>
+            </div>
+
+            <form onSubmit={handleSubmitResetRequest} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Request Type *
+                </label>
+                <select
+                  required
+                  value={resetRequestForm.request_type}
+                  onChange={(e) => setResetRequestForm({...resetRequestForm, request_type: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="forgot_password">Forgot Password</option>
+                  <option value="account_locked">Account Locked</option>
+                  <option value="data_corruption">Data Corruption</option>
+                  <option value="account_transfer">Account Transfer</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Details (Optional)
+                </label>
+                <textarea
+                  value={resetRequestForm.details}
+                  onChange={(e) => setResetRequestForm({...resetRequestForm, details: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                  rows={4}
+                  placeholder="Please describe your issue in detail..."
+                />
+              </div>
+
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                <p>Your request will be reviewed by an administrator. Response time is typically 24-48 hours.</p>
+              </div>
+
+              <div className="flex gap-3 pt-4 border-t">
+                <button
+                  type="submit"
+                  className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
+                >
+                  Submit Request
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowResetRequestModal(false);
+                    setResetRequestForm({ request_type: 'forgot_password', details: '' });
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Tenancy Details Modal */}
       {showTenancyModal && selectedTenancy && (

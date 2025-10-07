@@ -394,6 +394,241 @@ app.post('/api/setup/landlord', authenticateToken, requireRole('admin'), async (
 });
 
 // ============================================
+// RESET REQUEST ROUTES
+// ============================================
+
+// Submit reset request (landlord only)
+app.post('/api/reset-requests', authenticateToken, requireRole('landlord'), async (req, res) => {
+    try {
+        const { request_type, details } = req.body;
+
+        // Validate request type
+        const validTypes = ['forgot_password', 'account_locked', 'data_corruption', 'account_transfer', 'other'];
+        if (!validTypes.includes(request_type)) {
+            return res.status(400).json({ error: 'Invalid request type' });
+        }
+
+        // Check if landlord already has a pending request
+        const existingRequest = await pool.query(
+            'SELECT id FROM reset_requests WHERE landlord_id = $1 AND status = $2',
+            [req.user.id, 'pending']
+        );
+
+        if (existingRequest.rows.length > 0) {
+            return res.status(400).json({ error: 'You already have a pending reset request' });
+        }
+
+        // Create reset request
+        const result = await pool.query(
+            `INSERT INTO reset_requests (landlord_id, request_type, details, status)
+             VALUES ($1, $2, $3, $4)
+             RETURNING id, request_type, details, status, created_at`,
+            [req.user.id, request_type, details || null, 'pending']
+        );
+
+        // Create notification for admin
+        await pool.query(
+            `INSERT INTO notifications (user_id, type, title, message)
+             VALUES (
+                 (SELECT id FROM users WHERE user_type = 'admin' LIMIT 1),
+                 'admin_reset_request',
+                 'New Account Reset Request',
+                 $1
+             )`,
+            [`${req.user.full_name} has submitted a ${request_type.replace('_', ' ')} request`]
+        );
+
+        res.status(201).json({
+            message: 'Reset request submitted successfully',
+            request: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Submit reset request error:', error);
+        res.status(500).json({ error: 'Failed to submit reset request' });
+    }
+});
+
+// Get reset requests (admin only)
+app.get('/api/admin/reset-requests', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT rr.*, u.full_name as landlord_name, u.email as landlord_email
+             FROM reset_requests rr
+             JOIN users u ON rr.landlord_id = u.id
+             ORDER BY rr.created_at DESC`
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get reset requests error:', error);
+        res.status(500).json({ error: 'Failed to get reset requests' });
+    }
+});
+
+// Handle reset request action (admin only)
+app.post('/api/admin/reset-requests/:id/action', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { action, response } = req.body;
+
+        // Get the reset request
+        const requestResult = await pool.query(
+            'SELECT * FROM reset_requests WHERE id = $1',
+            [id]
+        );
+
+        if (requestResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Reset request not found' });
+        }
+
+        const resetRequest = requestResult.rows[0];
+
+        if (resetRequest.status !== 'pending') {
+            return res.status(400).json({ error: 'Request has already been processed' });
+        }
+
+        let newStatus = 'completed';
+        let adminResponse = response || '';
+
+        // Handle different actions
+        if (action === 'password_reset') {
+            // Generate a temporary password and update the landlord's account
+            const tempPassword = Math.random().toString(36).slice(-12) + 'Temp123!';
+            const passwordHash = await bcrypt.hash(tempPassword, SALT_ROUNDS);
+
+            await pool.query(
+                'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+                [passwordHash, resetRequest.landlord_id]
+            );
+
+            adminResponse = `Password reset to: ${tempPassword}. Please change this after logging in.`;
+
+            // Create notification for landlord
+            await pool.query(
+                `INSERT INTO notifications (user_id, type, title, message)
+                 VALUES ($1, $2, $3, $4)`,
+                [
+                    resetRequest.landlord_id,
+                    'password_reset',
+                    'Password Reset Complete',
+                    'Your password has been reset by an administrator. Please check your email for the new temporary password.'
+                ]
+            );
+
+        } else if (action === 'contact_landlord') {
+            newStatus = 'pending';
+            adminResponse = response || 'Admin will contact you directly.';
+
+        } else if (action === 'deny') {
+            newStatus = 'denied';
+            adminResponse = response || 'Request denied.';
+
+            // Create notification for landlord
+            await pool.query(
+                `INSERT INTO notifications (user_id, type, title, message)
+                 VALUES ($1, $2, $3, $4)`,
+                [
+                    resetRequest.landlord_id,
+                    'request_denied',
+                    'Reset Request Denied',
+                    'Your account reset request has been denied. Please contact support for more information.'
+                ]
+            );
+        }
+
+        // Update the reset request
+        await pool.query(
+            `UPDATE reset_requests
+             SET status = $1, admin_response = $2, admin_id = $3, responded_at = CURRENT_TIMESTAMP
+             WHERE id = $4`,
+            [newStatus, adminResponse, req.user.id, id]
+        );
+
+        res.json({
+            message: `Reset request ${action} successfully`,
+            status: newStatus
+        });
+    } catch (error) {
+        console.error('Reset request action error:', error);
+        res.status(500).json({ error: 'Failed to process reset request' });
+    }
+});
+
+// Get landlord's own reset requests
+app.get('/api/reset-requests', authenticateToken, requireRole('landlord'), async (req, res) => {
+    try {
+        const result = await pool.query(
+            `SELECT id, request_type, details, status, admin_response, created_at, responded_at
+             FROM reset_requests
+             WHERE landlord_id = $1
+             ORDER BY created_at DESC`,
+            [req.user.id]
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get landlord reset requests error:', error);
+        res.status(500).json({ error: 'Failed to get reset requests' });
+    }
+});
+
+// ============================================
+// ADMIN ROUTES
+// ============================================
+
+// Get system stats (admin only)
+app.get('/api/admin/stats', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const [landlordsResult, lodgersResult, tenanciesResult, revenueResult] = await Promise.all([
+            pool.query("SELECT COUNT(*) as count FROM users WHERE user_type = 'landlord'"),
+            pool.query("SELECT COUNT(*) as count FROM users WHERE user_type = 'lodger'"),
+            pool.query("SELECT COUNT(*) as count FROM tenancies WHERE status IN ('active', 'draft')"),
+            pool.query("SELECT COALESCE(SUM(rent_due), 0) as total FROM payment_schedule WHERE payment_status IN ('paid', 'confirmed')")
+        ]);
+
+        res.json({
+            totalLandlords: parseInt(landlordsResult.rows[0].count),
+            totalLodgers: parseInt(lodgersResult.rows[0].count),
+            totalTenancies: parseInt(tenanciesResult.rows[0].count),
+            totalRevenue: parseFloat(revenueResult.rows[0].total)
+        });
+    } catch (error) {
+        console.error('Get admin stats error:', error);
+        res.status(500).json({ error: 'Failed to get system stats' });
+    }
+});
+
+// Get landlords with their lodgers (admin only)
+app.get('/api/admin/landlords-with-lodgers', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const result = await pool.query(`
+            SELECT
+                l.id, l.full_name, l.email, l.created_at,
+                json_agg(
+                    json_build_object(
+                        'id', lodger.id,
+                        'full_name', lodger.full_name,
+                        'email', lodger.email,
+                        'tenancy_status', t.status,
+                        'monthly_rent', t.monthly_rent
+                    )
+                ) FILTER (WHERE lodger.id IS NOT NULL) as lodgers
+            FROM users l
+            LEFT JOIN tenancies t ON l.id = t.landlord_id AND t.status IN ('active', 'draft')
+            LEFT JOIN users lodger ON t.lodger_id = lodger.id
+            WHERE l.user_type = 'landlord'
+            GROUP BY l.id, l.full_name, l.email, l.created_at
+            ORDER BY l.created_at DESC
+        `);
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get landlords with lodgers error:', error);
+        res.status(500).json({ error: 'Failed to get landlords data' });
+    }
+});
+
+// ============================================
 // AUTHENTICATION ROUTES
 // ============================================
 
@@ -698,7 +933,7 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
             values.push(phone);
         }
 
-        // Handle structured address
+        // Handle structured address (nested object)
         if (address !== undefined) {
             if (typeof address === 'object') {
                 if (address.house_number !== undefined) {
@@ -735,6 +970,28 @@ app.put('/api/users/profile', authenticateToken, async (req, res) => {
                 updates.push(`postcode = $${paramCount++}`);
                 values.push(parsed.postcode);
             }
+        }
+
+        // Handle individual address fields (sent at top level)
+        if (req.body.house_number !== undefined) {
+            updates.push(`house_number = $${paramCount++}`);
+            values.push(req.body.house_number);
+        }
+        if (req.body.street_name !== undefined) {
+            updates.push(`street_name = $${paramCount++}`);
+            values.push(req.body.street_name);
+        }
+        if (req.body.city !== undefined) {
+            updates.push(`city = $${paramCount++}`);
+            values.push(req.body.city);
+        }
+        if (req.body.county !== undefined) {
+            updates.push(`county = $${paramCount++}`);
+            values.push(req.body.county);
+        }
+        if (req.body.postcode !== undefined) {
+            updates.push(`postcode = $${paramCount++}`);
+            values.push(req.body.postcode);
         }
 
         if (email !== undefined) {
@@ -834,8 +1091,8 @@ app.put('/api/users/:id', authenticateToken, requireRole('landlord', 'admin'), a
     }
 });
 
-// List users (landlord/admin only)
-app.get('/api/users', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+// List users (admin only)
+app.get('/api/admin/users', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
         const result = await pool.query(
             'SELECT id, email, user_type, full_name, phone, is_active, created_at FROM users ORDER BY created_at DESC'
@@ -845,6 +1102,88 @@ app.get('/api/users', authenticateToken, requireRole('landlord', 'admin'), async
     } catch (error) {
         console.error('List users error:', error);
         res.status(500).json({ error: 'Failed to list users' });
+    }
+});
+
+// Update user (admin only)
+app.put('/api/admin/users/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { email, full_name, phone, is_active } = req.body;
+
+        // Build update query dynamically
+        const updates = [];
+        const values = [];
+        let paramCount = 1;
+
+        if (email !== undefined) {
+            updates.push(`email = $${paramCount++}`);
+            values.push(email);
+        }
+        if (full_name !== undefined) {
+            updates.push(`full_name = $${paramCount++}`);
+            values.push(full_name);
+        }
+        if (phone !== undefined) {
+            updates.push(`phone = $${paramCount++}`);
+            values.push(phone);
+        }
+        if (is_active !== undefined) {
+            updates.push(`is_active = $${paramCount++}`);
+            values.push(is_active);
+        }
+
+        if (updates.length === 0) {
+            return res.status(400).json({ error: 'No fields to update' });
+        }
+
+        updates.push(`updated_at = CURRENT_TIMESTAMP`);
+        values.push(id);
+
+        const result = await pool.query(
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone, is_active`,
+            values
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json(result.rows[0]);
+    } catch (error) {
+        console.error('Update user error:', error);
+        res.status(500).json({ error: 'Failed to update user' });
+    }
+});
+
+// Reset user password (admin only)
+app.post('/api/admin/users/:id/reset-password', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { new_password } = req.body;
+
+        if (!new_password || new_password.length < 6) {
+            return res.status(400).json({ error: 'Password must be at least 6 characters long' });
+        }
+
+        const passwordHash = await bcrypt.hash(new_password, SALT_ROUNDS);
+
+        const result = await pool.query(
+            'UPDATE users SET password_hash = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, email, full_name',
+            [passwordHash, id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        res.json({
+            message: 'Password reset successfully',
+            user: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Reset user password error:', error);
+        res.status(500).json({ error: 'Failed to reset password' });
     }
 });
 

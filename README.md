@@ -80,7 +80,7 @@ A comprehensive, production-ready property management system for UK landlords an
 - ✅ **Responsive Design** - Mobile, tablet, and desktop
 - ✅ **Docker Containerization** - Easy deployment
 - ✅ **Initial Setup Wizard** - Guided first-time installation
-- ✅ **Factory Reset** - Complete system reset for development
+- ✅ **Factory Reset** - Complete system reset for development - from admin accont only 
 - ✅ **Rooms Management** - Property room configuration system
 
 ---

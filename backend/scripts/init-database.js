@@ -233,6 +233,23 @@ async function createTables() {
         `);
         console.log('✓ Created deductions table');
 
+        // Create reset_requests table
+        await client.query(`
+            CREATE TABLE IF NOT EXISTS reset_requests (
+                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+                landlord_id UUID REFERENCES users(id) ON DELETE CASCADE,
+                request_type VARCHAR(50) NOT NULL CHECK (request_type IN ('forgot_password', 'account_locked', 'data_corruption', 'account_transfer', 'other')),
+                details TEXT,
+                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied', 'completed')),
+                admin_response TEXT,
+                admin_id UUID REFERENCES users(id),
+                responded_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+        console.log('✓ Created reset_requests table');
+
         // Create indexes
         await client.query('CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)');
         await client.query('CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC)');
