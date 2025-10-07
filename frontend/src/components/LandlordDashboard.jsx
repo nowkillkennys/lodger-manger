@@ -780,13 +780,23 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
       fetchDashboardData();
 
       // Update localStorage to keep user object in sync
-      const updatedUser = {
-        ...JSON.parse(localStorage.getItem('user') || '{}'),
-        full_name: response.data.full_name,
-        email: response.data.email,
-        phone: response.data.phone
-      };
-      localStorage.setItem('user', JSON.stringify(updatedUser));
+      try {
+        const updatedUser = {
+          ...JSON.parse(localStorage.getItem('user') || '{}'),
+          full_name: response.data.full_name,
+          email: response.data.email,
+          phone: response.data.phone
+        };
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      } catch (parseError) {
+        console.error('Failed to update localStorage user data:', parseError);
+        // Reinitialize with fresh data if parsing fails
+        localStorage.setItem('user', JSON.stringify({
+          full_name: response.data.full_name,
+          email: response.data.email,
+          phone: response.data.phone
+        }));
+      }
 
       alert('Profile updated successfully!');
     } catch (error) {
