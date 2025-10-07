@@ -27,6 +27,8 @@ services:
   backend:
     image: nowkillkennys/lodger-manager-backend:latest
     container_name: lodger_backend
+    env_file:
+      - backend/.env
     environment:
       NODE_ENV: production
       PORT: 3003
