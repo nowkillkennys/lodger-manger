@@ -731,6 +731,88 @@ const AdminDashboard = ({ user, onLogout }) => {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-2xl font-bold mb-6">System Settings</h2>
 
+            {/* Backup & Export Section */}
+            <div className="mb-6">
+              <h3 className="text-lg font-semibold mb-4 text-gray-900">Backup & Export</h3>
+              <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                <div className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">Export Full Database</h4>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Download a complete JSON export of all platform data including users, tenancies, payments, and more.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const token = localStorage.getItem('token');
+                          const response = await axios.get(`${API_URL}/api/admin/backup/json`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                            responseType: 'blob'
+                          });
+
+                          const blob = new Blob([response.data], { type: 'application/json' });
+                          const url = window.URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.setAttribute('download', `lodger-manager-backup-${new Date().toISOString()}.json`);
+                          document.body.appendChild(link);
+                          link.click();
+                          link.remove();
+                          window.URL.revokeObjectURL(url);
+                        } catch (error) {
+                          alert('Failed to download backup: ' + (error.response?.data?.error || error.message));
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download JSON Backup
+                    </button>
+                  </div>
+
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-2">PostgreSQL Database Dump</h4>
+                    <p className="text-sm text-gray-600 mb-3">
+                      Download a PostgreSQL SQL dump file for complete database restoration.
+                    </p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const token = localStorage.getItem('token');
+                          const response = await axios.get(`${API_URL}/api/admin/backup/database`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                            responseType: 'blob'
+                          });
+
+                          const blob = new Blob([response.data], { type: 'application/sql' });
+                          const url = window.URL.createObjectURL(blob);
+                          const link = document.createElement('a');
+                          link.href = url;
+                          link.setAttribute('download', `lodger-manager-db-${new Date().toISOString().replace(/[:.]/g, '-')}.sql`);
+                          document.body.appendChild(link);
+                          link.click();
+                          link.remove();
+                          window.URL.revokeObjectURL(url);
+                        } catch (error) {
+                          alert('Failed to download database dump: ' + (error.response?.data?.error || error.message));
+                        }
+                      }}
+                      className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                    >
+                      <Download className="w-4 h-4" />
+                      Download SQL Dump
+                    </button>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-xs text-blue-800">
+                      <strong>💡 Tip:</strong> Regular backups are recommended before making significant changes or performing factory resets. Store backups securely outside the server.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Factory Reset Section */}
             <div className="pt-6 border-t">
               <h3 className="text-lg font-semibold mb-4 text-red-600">Danger Zone</h3>

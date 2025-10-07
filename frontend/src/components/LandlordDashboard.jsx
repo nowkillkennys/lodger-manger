@@ -199,7 +199,7 @@ const DeductionsHistory = ({ tenancyId }) => {
    );
  };
 
-const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
+const LandlordDashboard = ({ user, onLogout }) => {
   console.log('LandlordDashboard render start');
    const [activeTab, setActiveTab] = useState('overview');
   const [tenancies, setTenancies] = useState([]);
@@ -263,6 +263,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
     new_monthly_rent: '',
     notes: ''
   });
+  const [showCancelOfferModal, setShowCancelOfferModal] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [stats, setStats] = useState({
     activeTenancies: 0,
@@ -328,15 +329,14 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
 
   // Update newTenancy address fields when landlordProfile is loaded
   useEffect(() => {
-    if (landlordProfile?.address) {
-      const parsedAddress = parseAddress(landlordProfile.address);
+    if (landlordProfile) {
       setNewTenancy(prev => ({
         ...prev,
-        property_house_number: parsedAddress.house_number,
-        property_street_name: parsedAddress.street_name,
-        property_city: parsedAddress.city,
-        property_county: parsedAddress.county,
-        property_postcode: parsedAddress.postcode
+        property_house_number: landlordProfile.house_number || '',
+        property_street_name: landlordProfile.street_name || '',
+        property_city: landlordProfile.city || '',
+        property_county: landlordProfile.county || '',
+        property_postcode: landlordProfile.postcode || ''
       }));
     }
   }, [landlordProfile]);
@@ -344,16 +344,15 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
   // Update profileForm when landlordProfile is loaded
    useEffect(() => {
      if (landlordProfile) {
-       const parsedAddress = parseAddress(landlordProfile.address || '');
        setProfileForm({
          full_name: landlordProfile.full_name || '',
          email: landlordProfile.email || '',
          phone: landlordProfile.phone || '',
-         house_number: parsedAddress.house_number,
-         street_name: parsedAddress.street_name,
-         city: parsedAddress.city,
-         county: parsedAddress.county,
-         postcode: parsedAddress.postcode,
+         house_number: landlordProfile.house_number || '',
+         street_name: landlordProfile.street_name || '',
+         city: landlordProfile.city || '',
+         county: landlordProfile.county || '',
+         postcode: landlordProfile.postcode || '',
          rooms: landlordProfile.rooms || [],
          bank_account_number: landlordProfile.bank_account_number || '',
          bank_sort_code: landlordProfile.bank_sort_code || '',
@@ -396,7 +395,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
         axios.get(`${API_URL}/api/payments`, config),
         axios.get(`${API_URL}/api/notifications`, config),
         axios.get(`${API_URL}/api/dashboard/landlord`, config),
-        axios.get(`${API_URL}/api/users`, config)
+        axios.get(`${API_URL}/api/users/lodgers`, config)
       ]);
 
       // Handle tenancies
@@ -636,6 +635,24 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
       alert('Breach notice issued successfully. The lodger has 7 days to remedy the breach.');
     } catch (error) {
       alert(error.response?.data?.error || 'Failed to issue breach notice');
+    }
+  };
+
+  const handleCancelOffer = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(
+        `${API_URL}/api/tenancies/${selectedTenancy.id}/cancel`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setShowCancelOfferModal(false);
+      setSelectedTenancy(null);
+      fetchDashboardData();
+
+      alert('Tenancy offer cancelled successfully. The lodger has been notified.');
+    } catch (error) {
+      alert(error.response?.data?.error || 'Failed to cancel tenancy offer');
     }
   };
 
@@ -1724,8 +1741,8 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                         <input
                           type="text"
                           value={newTenancy.property_house_number}
-                          readOnly={true}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                          disabled
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
                           placeholder="123"
                         />
                       </div>
@@ -1734,8 +1751,8 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                         <input
                           type="text"
                           value={newTenancy.property_street_name}
-                          readOnly={true}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                          disabled
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
                           placeholder="Main Street"
                         />
                       </div>
@@ -1744,8 +1761,8 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                         <input
                           type="text"
                           value={newTenancy.property_city}
-                          readOnly={true}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                          disabled
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
                           placeholder="London"
                         />
                       </div>
@@ -1754,8 +1771,8 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                         <input
                           type="text"
                           value={newTenancy.property_county}
-                          readOnly={true}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                          disabled
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
                           placeholder="Greater London"
                         />
                       </div>
@@ -1764,8 +1781,8 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                         <input
                           type="text"
                           value={newTenancy.property_postcode}
-                          readOnly={true}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                          disabled
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 cursor-not-allowed"
                           placeholder="SW1A 1AA"
                         />
                       </div>
@@ -1913,7 +1930,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                           name="payment_type"
                           value="calendar"
                           checked={newTenancy.payment_type === 'calendar'}
-                          onChange={(e) => setNewTenancy({...newTenancy, payment_type: e.target.value})}
+                          onChange={(e) => setNewTenancy({...newTenancy, payment_type: e.target.value, payment_frequency: 'monthly'})}
                           className="w-4 h-4 text-indigo-600 focus:ring-indigo-500"
                         />
                         <div>
@@ -1939,6 +1956,17 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                         <option value="monthly">Monthly</option>
                         <option value="4-weekly">4-weekly</option>
                       </select>
+                      {newTenancy.payment_frequency !== 'monthly' && (
+                        <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                          <p className="text-xs text-blue-800">
+                            <strong>Note:</strong> For non-monthly frequencies, the lodger will pay a calculated amount based on:
+                            <span className="font-mono font-semibold"> Monthly Rent × Payment Days ÷ 30.44</span>
+                          </p>
+                          <p className="text-xs text-blue-700 mt-1">
+                            Examples: Weekly (7 days) = Monthly Rent × 7 ÷ 30.44 | 4-weekly (28 days) = Monthly Rent × 28 ÷ 30.44
+                          </p>
+                        </div>
+                      )}
                     </div>
                   ) : (
                     <div>
@@ -2121,6 +2149,15 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                               Agreement
                             </a>
                           )}
+                          {!selectedTenancy.lodger_signature && (
+                            <button
+                              onClick={() => setShowCancelOfferModal(true)}
+                              className="flex items-center justify-center gap-2 px-6 py-4 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold text-base"
+                            >
+                              <X className="w-5 h-5" />
+                              Cancel Offer
+                            </button>
+                          )}
                         </div>
                       </div>
 
@@ -2216,8 +2253,8 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                 <Users className="w-16 h-16 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-xl font-semibold text-gray-700 mb-2">No Tenancies Yet</h3>
                 <p className="text-gray-600 mb-6">Create your first tenancy to get started</p>
-                <button 
-                  onClick={onNewTenancy}
+                <button
+                  onClick={() => setShowCreateTenancy(true)}
                   className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition inline-flex items-center gap-2"
                 >
                   <Plus className="w-5 h-5" />
@@ -3943,6 +3980,55 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cancel Offer Modal */}
+      {showCancelOfferModal && selectedTenancy && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-red-600 text-white px-6 py-4 rounded-t-lg">
+              <h2 className="text-xl font-bold">Cancel Tenancy Offer</h2>
+            </div>
+            <div className="p-6">
+              <div className="mb-6">
+                <p className="text-gray-700 mb-4">
+                  Are you sure you want to cancel this tenancy offer?
+                </p>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-sm text-yellow-800">
+                  <p className="font-semibold mb-2">Warning:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>This action cannot be undone</li>
+                    <li>The lodger will be notified immediately</li>
+                    <li>All payment schedule data will be deleted</li>
+                    <li>The tenancy record will be permanently removed</li>
+                  </ul>
+                </div>
+                <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+                  <p className="text-sm text-gray-600">
+                    <strong>Lodger:</strong> {selectedTenancy.lodger_name}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <strong>Start Date:</strong> {new Date(selectedTenancy.start_date).toLocaleDateString()}
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={handleCancelOffer}
+                  className="flex-1 px-6 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold"
+                >
+                  Yes, Cancel Offer
+                </button>
+                <button
+                  onClick={() => setShowCancelOfferModal(false)}
+                  className="flex-1 px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                >
+                  No, Keep It
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

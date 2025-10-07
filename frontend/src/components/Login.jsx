@@ -212,17 +212,6 @@ const Login = ({ onLoginSuccess }) => {
             </button>
           </div>
         </form>
-
-        {/* Demo Credentials Hint */}
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <p className="text-sm text-gray-600 text-center mb-2">
-            <strong>Demo Credentials:</strong>
-          </p>
-          <div className="bg-gray-50 rounded-lg p-3 text-xs text-gray-700 space-y-1">
-            <p><strong>Email:</strong> admin@example.com</p>
-            <p><strong>Password:</strong> admin123</p>
-          </div>
-        </div>
       </div>
     </div>
   );

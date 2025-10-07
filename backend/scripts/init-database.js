@@ -44,6 +44,7 @@ async function createTables() {
                 bank_sort_code VARCHAR(8),
                 payment_reference VARCHAR(50),
                 rooms JSONB,
+                landlord_id UUID REFERENCES users(id) ON DELETE SET NULL,
                 last_login TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

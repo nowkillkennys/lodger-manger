@@ -3,6 +3,93 @@ import { Home, Bell, LogOut, DollarSign, Clock, Send, Wrench, FileText, Download
 import axios from 'axios';
 import { API_URL } from '../config';
 import AddressDisplay from './AddressDisplay';
+import PaymentCalendar from './PaymentCalendar';
+
+/**
+ * Convert payment frequency code to readable text
+ */
+const getPaymentFrequencyText = (frequency, paymentType = 'cycle', paymentDayOfMonth = 1) => {
+  // For calendar-based payments, show the specific day
+  if (paymentType === 'calendar' && paymentDayOfMonth) {
+    const suffix = paymentDayOfMonth === 1 ? 'st' : paymentDayOfMonth === 2 ? 'nd' : paymentDayOfMonth === 3 ? 'rd' : 'th';
+    return `Monthly on ${paymentDayOfMonth}${suffix}`;
+  }
+
+  const frequencyMap = {
+    'weekly': 'Weekly',
+    'bi-weekly': 'Every 2 weeks',
+    '4-weekly': 'Every 4 weeks',
+    'monthly': 'Monthly'
+  };
+  return frequencyMap[frequency] || 'Every 4 weeks';
+};
+
+/**
+ * Get payment cycle description for schedule header
+ */
+const getPaymentCycleDescription = (frequency) => {
+  const descriptionMap = {
+    'weekly': 'Your weekly payment cycle schedule',
+    'bi-weekly': 'Your bi-weekly (every 2 weeks) payment cycle schedule',
+    '4-weekly': 'Your 4-weekly (every 28 days) payment cycle schedule',
+    'monthly': 'Your monthly payment cycle schedule'
+  };
+  return descriptionMap[frequency] || 'Your payment cycle schedule';
+};
+
+/**
+ * Calculate rent per payment cycle
+ */
+const calculateRentPerCycle = (monthlyRent, paymentCycleDays, paymentType = 'cycle') => {
+  const AVERAGE_DAYS_PER_MONTH = 30.44;
+  // For calendar-based payments (specific day of month), always use full monthly rent
+  if (paymentType === 'calendar') {
+    return monthlyRent;
+  }
+  // For cycle-based payments with monthly frequency (30-31 days)
+  if (!paymentCycleDays || paymentCycleDays === 30 || paymentCycleDays === 31) {
+    return monthlyRent;
+  }
+  // Calculate based on cycle days for weekly/bi-weekly/4-weekly
+  return monthlyRent * paymentCycleDays / AVERAGE_DAYS_PER_MONTH;
+};
+
+/**
+ * Get rent label based on frequency
+ */
+const getRentLabel = (frequency, paymentType = 'cycle') => {
+  // For calendar-based payments, always show "Monthly Rent"
+  if (paymentType === 'calendar') {
+    return 'Monthly Rent';
+  }
+
+  const labelMap = {
+    'weekly': 'Weekly Rent',
+    'bi-weekly': 'Bi-Weekly Rent',
+    '4-weekly': '4-Weekly Rent',
+    'monthly': 'Monthly Rent'
+  };
+  return labelMap[frequency] || 'Rent Per Payment';
+};
+
+/**
+ * Get payment period text for agreements
+ */
+const getPaymentPeriodText = (frequency, paymentType = 'cycle', paymentDayOfMonth = 1) => {
+  // For calendar-based payments, show specific day
+  if (paymentType === 'calendar' && paymentDayOfMonth) {
+    const suffix = paymentDayOfMonth === 1 ? 'st' : paymentDayOfMonth === 2 ? 'nd' : paymentDayOfMonth === 3 ? 'rd' : 'th';
+    return `per month (on ${paymentDayOfMonth}${suffix})`;
+  }
+
+  const periodMap = {
+    'weekly': 'per week',
+    'bi-weekly': 'per 2 weeks',
+    '4-weekly': 'per 4 weeks',
+    'monthly': 'per month'
+  };
+  return periodMap[frequency] || 'per payment cycle';
+};
 
 const LodgerDashboard = ({ user, onLogout }) => {
   const [activeTab, setActiveTab] = useState('overview');
@@ -433,7 +520,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200">
           <nav className="flex gap-8">
-            {['overview', 'payments', 'agreement', 'extension offer', 'my profile', 'maintenance'].map((tab) => (
+            {['overview', 'payments', 'calendar', 'agreement', 'extension offer', 'my profile', 'maintenance'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
@@ -529,7 +616,11 @@ const LodgerDashboard = ({ user, onLogout }) => {
             <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-lg shadow-lg p-6 text-white mb-6">
               <h2 className="text-2xl font-bold mb-2">Welcome back, {user.fullName}!</h2>
               <p className="text-indigo-100">
-                {tenancy ? `Your tenancy at ${tenancy.property_address}` : 'Loading your tenancy details...'}
+                {tenancy ? (
+                  <>Your tenancy at <AddressDisplay address={tenancy.address} className="inline" /></>
+                ) : (
+                  'Loading your tenancy details...'
+                )}
               </p>
             </div>
 
@@ -571,11 +662,15 @@ const LodgerDashboard = ({ user, onLogout }) => {
                     <Home className="w-6 h-6 text-indigo-600" />
                   </div>
                 </div>
-                <p className="text-sm text-gray-600 mb-1">Monthly Rent</p>
-                <p className="text-2xl font-bold">
-                  £{tenancy?.monthly_rent || 0}
+                <p className="text-sm text-gray-600 mb-1">
+                  {tenancy ? getRentLabel(tenancy.payment_frequency, tenancy.payment_type) : 'Rent Amount'}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">Every 28 days</p>
+                <p className="text-2xl font-bold">
+                  £{tenancy ? calculateRentPerCycle(tenancy.monthly_rent, tenancy.payment_cycle_days, tenancy.payment_type).toFixed(2) : '0.00'}
+                </p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {tenancy ? getPaymentFrequencyText(tenancy.payment_frequency, tenancy.payment_type, tenancy.payment_day_of_month) : 'N/A'}
+                </p>
               </div>
             </div>
 
@@ -684,7 +779,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
             <div>
               <h2 className="text-2xl font-bold text-gray-900">Payment Schedule</h2>
               <p className="text-sm text-gray-600 mt-1">
-                Your 28-day payment cycle schedule. First payment is typically 2 months rent (current + advance).
+                {tenancy ? getPaymentCycleDescription(tenancy.payment_frequency) : 'Your payment cycle schedule'}. First payment is typically 2 months rent (current + advance).
               </p>
             </div>
 
@@ -830,6 +925,14 @@ const LodgerDashboard = ({ user, onLogout }) => {
           </div>
         )}
 
+        {/* Calendar Tab */}
+        {activeTab === 'calendar' && (
+          <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-gray-900">Payment Calendar</h2>
+            <PaymentCalendar payments={payments} tenancies={tenancy ? [tenancy] : []} />
+          </div>
+        )}
+
         {/* Agreement Tab */}
         {activeTab === 'agreement' && tenancy && (
           <div className="space-y-6">
@@ -890,7 +993,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
               <div className="space-y-3 border-t pt-4">
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Property:</span>
-                  <AddressDisplay address={tenancy.property_address} className="text-sm font-medium text-gray-900" />
+                  <AddressDisplay address={tenancy.address} className="text-sm font-medium text-gray-900" />
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Start Date:</span>
@@ -1371,7 +1474,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <p className="text-sm text-gray-600">Property Address</p>
-                    <AddressDisplay address={tenancy.property_address} className="font-medium" />
+                    <AddressDisplay address={tenancy.address} className="font-medium" />
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Room Description</p>
@@ -1386,8 +1489,8 @@ const LodgerDashboard = ({ user, onLogout }) => {
                     <p className="font-medium">{tenancy.initial_term_months} months</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-600">Monthly Rent</p>
-                    <p className="font-medium">£{tenancy.monthly_rent}</p>
+                    <p className="text-sm text-gray-600">{getRentLabel(tenancy.payment_frequency, tenancy.payment_type)}</p>
+                    <p className="font-medium">£{calculateRentPerCycle(tenancy.monthly_rent, tenancy.payment_cycle_days, tenancy.payment_type).toFixed(2)}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Initial Payment</p>
@@ -1418,15 +1521,15 @@ const LodgerDashboard = ({ user, onLogout }) => {
 
                   <p className="font-bold mt-3">PART 1 - PARTICULARS</p>
                   <div className="pl-3 space-y-1">
-                    <p><strong>PROPERTY:</strong> <AddressDisplay address={tenancy.property_address} /></p>
+                    <p><strong>PROPERTY:</strong> <AddressDisplay address={tenancy.address} /></p>
                     <p><strong>ROOM:</strong> {tenancy.room_description || 'Means the room or rooms in the Property which the Householder allocates to the Lodger'}</p>
                     <p><strong>SHARED AREAS:</strong> {tenancy.shared_areas || 'Entrance hall, staircase and landings, kitchen for cooking and storage, lavatory and bathroom, sitting room, garden (where applicable)'}</p>
                     <p><strong>HOUSEHOLDER (Landlord):</strong> {user.fullName}'s Landlord</p>
                     <p><strong>LODGER:</strong> {user.fullName}</p>
                     <p><strong>START DATE:</strong> {new Date(tenancy.start_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</p>
                     <p><strong>TERM:</strong> {tenancy.initial_term_months} Months Rolling Contract until Terminated by either party</p>
-                    <p><strong>INITIAL PAYMENT:</strong> £{tenancy.initial_payment} (current and month in advance payment)</p>
-                    <p><strong>ACCOMMODATION PAYMENT:</strong> £{tenancy.monthly_rent} per 28 days</p>
+                    <p><strong>INITIAL PAYMENT:</strong> £{tenancy.initial_payment} (current and advance payment)</p>
+                    <p><strong>ACCOMMODATION PAYMENT:</strong> £{calculateRentPerCycle(tenancy.monthly_rent, tenancy.payment_cycle_days, tenancy.payment_type).toFixed(2)} {getPaymentPeriodText(tenancy.payment_frequency, tenancy.payment_type, tenancy.payment_day_of_month)}</p>
                     <p><strong>PAYMENT DAY:</strong> The day of signing this agreement</p>
                     <p><strong>DEPOSIT:</strong> £{tenancy.deposit_amount || 0} {tenancy.deposit_applicable ? '(Applicable - Yes)' : '(Not Applicable - No)'}</p>
                   </div>

@@ -20,6 +20,10 @@ function generatePaymentSchedule(startDate, monthlyRent, numberOfPayments = 52, 
   const schedule = [];
   let previousBalance = 0;
 
+  // Calculate rent per cycle based on cycle days
+  // Using 30.44 as average days per month (365.25 / 12)
+  const AVERAGE_DAYS_PER_MONTH = 30.44;
+
   if (paymentType === 'calendar') {
     // Calendar-based: first payment on start date, subsequent on payment_day_of_month
     let currentDate = moment(startDate);
@@ -38,6 +42,7 @@ function generatePaymentSchedule(startDate, monthlyRent, numberOfPayments = 52, 
       const dueDateStr = dueDate.format('YYYY-MM-DD');
 
       // First payment is current + advance
+      // For calendar payments, use full monthlyRent since it's monthly
       const rentDue = i === 1 ? monthlyRent * 2 : monthlyRent;
 
       // Calculate balance: Rent Paid (C) - Rent Due (B) = Balance (D)
@@ -62,11 +67,14 @@ function generatePaymentSchedule(startDate, monthlyRent, numberOfPayments = 52, 
     const PAYMENT_CYCLE_DAYS = cycleDays;
     let currentDate = moment(startDate);
 
+    // Calculate rent per cycle based on actual cycle days
+    const rentPerCycle = monthlyRent * cycleDays / AVERAGE_DAYS_PER_MONTH;
+
     for (let i = 1; i <= numberOfPayments; i++) {
       const dueDate = currentDate.format('YYYY-MM-DD');
 
-      // First payment is current + advance
-      const rentDue = i === 1 ? monthlyRent * 2 : monthlyRent;
+      // First payment is current + advance (2 cycles worth)
+      const rentDue = i === 1 ? rentPerCycle * 2 : rentPerCycle;
 
       // Calculate balance: Rent Paid (C) - Rent Due (B) = Balance (D)
       // For new payments, assume nothing paid yet

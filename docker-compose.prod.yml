@@ -1,8 +1,6 @@
-version: "3.8"
-
 services:
   postgres:
-    image: postgres:15
+    image: postgres:18
     container_name: lodger_db
     environment:
       POSTGRES_DB: lodger_management
@@ -16,7 +14,7 @@ services:
       - "5433:5433"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "PGPASSWORD=${POSTGRES_PASSWORD} pg_isready -U postgres -d lodger_management -p 5433"]
+      test: ["CMD-SHELL", "PGPASSWORD=${DB_PASSWORD:-changeme123} pg_isready -U postgres -d lodger_management -p 5433"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -25,7 +23,7 @@ services:
       - lodger_network
 
   backend:
-    image: lodger-manager-backend:latest
+    image: ghcr.io/nowkillkennys/lodger-manager-backend:latest
     container_name: lodger_backend
     environment:
       NODE_ENV: production
@@ -57,7 +55,7 @@ services:
       - lodger_network
 
   frontend:
-    image: lodger-manager-frontend:latest
+    image: ghcr.io/nowkillkennys/lodger-manager-frontend:latest
     container_name: lodger_frontend
     environment:
       REACT_APP_API_URL: "/api"
