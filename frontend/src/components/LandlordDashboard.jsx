@@ -230,7 +230,7 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
       initial_payment: '',
       deposit_applicable: false,
       deposit_amount: '',
-      payment_type: 'cycle_based',
+      payment_type: 'cycle',
       payment_frequency: '4-weekly',
       payment_day_of_month: 1,
       shared_areas: {
@@ -775,6 +775,24 @@ const LandlordDashboard = ({ user, onLogout, onNewTenancy }) => {
         bank_sort_code: response.data.bank_sort_code || '',
         payment_reference: response.data.payment_reference || ''
       });
+
+      // Refresh dashboard data to update all UI components
+      fetchDashboardData();
+
+      // Update localStorage to keep user object in sync
+      const updatedUser = {
+        ...JSON.parse(localStorage.getItem('user') || '{}'),
+        full_name: response.data.full_name,
+        email: response.data.email,
+        phone: response.data.phone
+      };
+      try {
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      } catch (parseError) {
+        console.error('Failed to update localStorage user data:', parseError);
+        // Reinitialize with fresh data if parsing fails
+        localStorage.setItem('user', JSON.stringify(updatedUser));
+      }
 
       alert('Profile updated successfully!');
     } catch (error) {
