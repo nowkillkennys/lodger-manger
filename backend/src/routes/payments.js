@@ -113,34 +113,6 @@ async function extendPaymentSchedule(tenancyId) {
 }
 
 /**
- * Get payment schedule for tenancy
- * @route GET /api/tenancies/:id/payments
- * @auth Required
- * @param {string} id - Tenancy ID
- * @returns {Array} List of payments
- */
-router.get('/tenancies/:id/payments', authenticateToken, async (req, res) => {
-    try {
-        const { id } = req.params;
-
-        // Automatically extend payment schedule if needed
-        await extendPaymentSchedule(id);
-
-        const result = await pool.query(
-            `SELECT * FROM payment_schedule
-             WHERE tenancy_id = $1
-             ORDER BY payment_number ASC`,
-            [id]
-        );
-
-        res.json(result.rows);
-    } catch (error) {
-        console.error('Get payments error:', error);
-        res.status(500).json({ error: 'Failed to get payments' });
-    }
-});
-
-/**
  * Lodger submits payment
  * @route POST /api/payments/:id/submit
  * @auth Lodger only

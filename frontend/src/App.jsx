@@ -4,12 +4,34 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { Toaster } from 'react-hot-toast';
 import Login from './components/Login';
 import LandlordDashboard from './components/LandlordDashboard';
 import LodgerDashboard from './components/LodgerDashboard';
 import AdminDashboard from './components/AdminDashboard';
 import SetupWizard from './components/SetupWizard';
 import { API_URL } from './config';
+
+import * as Sentry from "@sentry/react";
+
+Sentry.init({
+    dsn: "https://acda07d0377dc8373f2e18e8e7ee23f5@o4510150914736128.ingest.de.sentry.io/4510150919323728",
+    // Setting this option to true will send default PII data to Sentry.
+    // For example, automatic IP address collection on events
+    sendDefaultPii: true,
+
+    integrations: [Sentry.browserTracingIntegration(), Sentry.consoleLoggingIntegration({ levels: ["log", "warn", "error"] }), Sentry.replayIntegration()],
+
+        // Set tracesSampleRate to 1.0 to capture 100%
+        // of transactions for performance monitoring.
+        // We recommend adjusting this value in production
+    tracesSampleRate: 1.0,
+        // Set `tracePropagationTargets` to control for which URLs distributed tracing should be enabled
+    tracePropagationTargets: ["localhost", /^https:\/\/yourserver\.io\/api/],
+    enableLogs: true,
+    replaysSessionSampleRate: 0.1, // This sets the sample rate at 10%. You may want to change it to 100% while in development and then sample at a lower rate in production.
+    replaysOnErrorSampleRate: 1.0 // If you're not already sampling the entire session, change the sample rate to 100% when sampling sessions where errors occur.
+});
 
 function App() {
     const [user, setUser] = useState(null);
@@ -113,6 +135,7 @@ function App() {
     // Logged in - show appropriate dashboard
     return (
         <div className="min-h-screen bg-gray-50">
+            <Toaster />
             {user.user_type === 'admin' ? (
                 <AdminDashboard user={user} onLogout={handleLogout} />
             ) : user.user_type === 'landlord' ? (

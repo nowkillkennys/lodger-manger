@@ -4,6 +4,7 @@ import axios from 'axios';
 import { API_URL } from '../config';
 import AddressDisplay from './AddressDisplay';
 import PaymentCalendar from './PaymentCalendar';
+import { showSuccess, showError, showWarning } from '../utils/toast';
 
 /**
  * Convert payment frequency code to readable text
@@ -42,6 +43,15 @@ const getPaymentCycleDescription = (frequency) => {
  */
 const calculateRentPerCycle = (monthlyRent, paymentCycleDays, paymentType = 'cycle') => {
   const AVERAGE_DAYS_PER_MONTH = 30.44;
+
+  // Handle null/undefined/NaN monthly rent
+  if (!monthlyRent || isNaN(monthlyRent)) {
+    return 0;
+  }
+
+  // Convert to number to ensure .toFixed() works
+  monthlyRent = parseFloat(monthlyRent);
+
   // For calendar-based payments (specific day of month), always use full monthly rent
   if (paymentType === 'calendar') {
     return monthlyRent;
@@ -187,22 +197,22 @@ const LodgerDashboard = ({ user, onLogout }) => {
 
   const handleAcceptAgreement = async () => {
     if (!agreedToTerms) {
-      alert('Please agree to the terms and conditions');
+      showError('Please agree to the terms and conditions');
       return;
     }
 
     if (!photoIdFile) {
-      alert('Please upload your photo ID');
+      showError('Please upload your photo ID');
       return;
     }
 
     if (!dateOfBirth) {
-      alert('Please enter your date of birth');
+      showError('Please enter your date of birth');
       return;
     }
 
     if (!idExpiryDate) {
-      alert('Please enter your ID expiry date');
+      showError('Please enter your ID expiry date');
       return;
     }
 
@@ -225,9 +235,9 @@ const LodgerDashboard = ({ user, onLogout }) => {
 
       setShowAgreementModal(false);
       fetchLodgerData();
-      alert('Agreement accepted successfully!');
+      showSuccess('Agreement accepted successfully!');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to accept agreement');
+      showError(error.response?.data?.error || 'Failed to accept agreement');
     } finally {
       setUploadingAgreement(false);
     }
@@ -255,9 +265,9 @@ const LodgerDashboard = ({ user, onLogout }) => {
         notes: ''
       });
       fetchLodgerData();
-      alert('Payment submitted successfully! Your landlord will review and confirm.');
+      showSuccess('Payment submitted successfully! Your landlord will review and confirm.');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to submit payment');
+      showError(error.response?.data?.error || 'Failed to submit payment');
     }
   };
 
@@ -319,8 +329,15 @@ const LodgerDashboard = ({ user, onLogout }) => {
     );
   }
 
-  // Show onboarding message if no tenancy exists
+  // Show message if no tenancy exists
   if (!tenancy) {
+    // Check if there's a cancellation notification
+    const cancellationNotification = notifications.find(n =>
+      n.notification_type === 'tenancy_cancelled' ||
+      n.message?.includes('cancelled') ||
+      n.message?.includes('canceled')
+    );
+
     return (
       <div className="min-h-screen bg-gray-50">
         {/* Navigation Bar */}
@@ -355,30 +372,64 @@ const LodgerDashboard = ({ user, onLogout }) => {
 
         <div className="max-w-4xl mx-auto px-4 py-16">
           <div className="bg-white rounded-lg shadow-lg p-12 text-center">
-            <div className="w-20 h-20 bg-indigo-100 rounded-full flex items-center justify-center mx-auto mb-6">
-              <Home className="w-10 h-10 text-indigo-600" />
+            <div className={`w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 ${
+              cancellationNotification ? 'bg-red-100' : 'bg-indigo-100'
+            }`}>
+              <Home className={`w-10 h-10 ${
+                cancellationNotification ? 'text-red-600' : 'text-indigo-600'
+              }`} />
             </div>
-            <h2 className="text-3xl font-bold text-gray-900 mb-4">Welcome to Lodger Manager!</h2>
-            <p className="text-lg text-gray-600 mb-6">
-              Your landlord account has been created successfully.
-            </p>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-left max-w-2xl mx-auto">
-              <h3 className="font-semibold text-blue-900 mb-3">Next Steps:</h3>
-              <ol className="space-y-2 text-blue-800">
-                <li className="flex items-start gap-2">
-                  <span className="font-bold">1.</span>
-                  <span>Your landlord will create a tenancy agreement for you</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold">2.</span>
-                  <span>You'll receive access to view your tenancy details, payment schedule, and agreement</span>
-                </li>
-                <li className="flex items-start gap-2">
-                  <span className="font-bold">3.</span>
-                  <span>You'll be able to submit payments and manage your tenancy</span>
-                </li>
-              </ol>
-            </div>
+
+            {cancellationNotification ? (
+              <>
+                <h2 className="text-3xl font-bold text-gray-900 mb-4">Tenancy Offer Cancelled</h2>
+                <p className="text-lg text-gray-600 mb-6">
+                  Your tenancy offer has been cancelled by the landlord.
+                </p>
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6 text-left max-w-2xl mx-auto">
+                  <h3 className="font-semibold text-yellow-900 mb-3">What this means:</h3>
+                  <ul className="space-y-2 text-yellow-800">
+                    <li className="flex items-start gap-2">
+                      <span>•</span>
+                      <span>The tenancy agreement is no longer active</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span>•</span>
+                      <span>No payments are required</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span>•</span>
+                      <span>Please contact your landlord for more information</span>
+                    </li>
+                  </ul>
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="text-3xl font-bold text-gray-900 mb-4">Welcome to Lodger Manager!</h2>
+                <p className="text-lg text-gray-600 mb-6">
+                  Your account has been created successfully.
+                </p>
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 text-left max-w-2xl mx-auto">
+                  <h3 className="font-semibold text-blue-900 mb-3">Next Steps:</h3>
+                  <ol className="space-y-2 text-blue-800">
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold">1.</span>
+                      <span>Your landlord will create a tenancy agreement for you</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold">2.</span>
+                      <span>You'll receive access to view your tenancy details, payment schedule, and agreement</span>
+                    </li>
+                    <li className="flex items-start gap-2">
+                      <span className="font-bold">3.</span>
+                      <span>You'll be able to submit payments and manage your tenancy</span>
+                    </li>
+                  </ol>
+                </div>
+              </>
+            )}
+
             <p className="text-sm text-gray-500 mt-8">
               Please contact your landlord if you have any questions.
             </p>
@@ -688,7 +739,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
                           <p className="text-xs text-gray-600">{new Date(payment.due_date).toLocaleDateString('en-GB')}</p>
                         </div>
                         <div className="text-right">
-                          <p className="font-semibold">£{parseFloat(payment.rent_due).toFixed(2)}</p>
+                          <p className="font-semibold">£{parseFloat(payment.rent_due || 0).toFixed(2)}</p>
                           <span className={`text-xs px-2 py-1 rounded ${
                             payment.payment_status === 'paid' || payment.payment_status === 'confirmed'
                               ? 'bg-green-100 text-green-700'
@@ -733,7 +784,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
                         });
                         setShowSubmitPayment(true);
                       } else {
-                        alert('No pending payments found');
+                        showWarning('No pending payments found');
                       }
                     }}
                     className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-indigo-600 hover:bg-indigo-50 transition text-left"
@@ -840,15 +891,15 @@ const LodgerDashboard = ({ user, onLogout }) => {
                             {new Date(payment.due_date).toLocaleDateString('en-GB')}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap font-medium">
-                            £{parseFloat(payment.rent_due).toFixed(2)}
+                            £{parseFloat(payment.rent_due || 0).toFixed(2)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             £{parseFloat(payment.rent_paid || 0).toFixed(2)}
                           </td>
                           <td className={`px-6 py-4 whitespace-nowrap font-semibold ${
-                            parseFloat(payment.balance) >= 0 ? 'text-green-600' : 'text-red-600'
+                            parseFloat(payment.balance || 0) >= 0 ? 'text-green-600' : 'text-red-600'
                           }`}>
-                            £{parseFloat(payment.balance).toFixed(2)}
+                            £{parseFloat(payment.balance || 0).toFixed(2)}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             {isPaid ? (
@@ -997,7 +1048,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Start Date:</span>
-                  <span className="text-sm font-medium text-gray-900">{new Date(tenancy.start_date).toLocaleDateString()}</span>
+                  <span className="text-sm font-medium text-gray-900">{tenancy.start_date ? new Date(tenancy.start_date).toLocaleDateString() : 'N/A'}</span>
                 </div>
                 <div className="flex justify-between py-2 border-b border-gray-100">
                   <span className="text-sm text-gray-600">Term:</span>
@@ -1119,11 +1170,11 @@ const LodgerDashboard = ({ user, onLogout }) => {
                                     { response: 'accepted', notes },
                                     { headers: { Authorization: `Bearer ${token}` } }
                                   );
-                                  alert('Extension offer accepted! Your tenancy has been extended.');
+                                  showSuccess('Extension offer accepted! Your tenancy has been extended.');
                                   window.location.reload();
                                 }
                               } catch (error) {
-                                alert(error.response?.data?.error || 'Failed to accept extension offer');
+                                showError(error.response?.data?.error || 'Failed to accept extension offer');
                               }
                             }}
                             className="flex-1 bg-green-600 text-white px-6 py-3 rounded-lg hover:bg-green-700 transition font-semibold"
@@ -1155,11 +1206,11 @@ const LodgerDashboard = ({ user, onLogout }) => {
                                     { response: 'rejected', notes },
                                     { headers: { Authorization: `Bearer ${token}` } }
                                   );
-                                  alert('Extension offer rejected. Your tenancy will end on the current end date.');
+                                  showWarning('Extension offer rejected. Your tenancy will end on the current end date.');
                                   window.location.reload();
                                 }
                               } catch (error) {
-                                alert(error.response?.data?.error || 'Failed to reject extension offer');
+                                showError(error.response?.data?.error || 'Failed to reject extension offer');
                               }
                             }}
                             className="flex-1 bg-red-600 text-white px-6 py-3 rounded-lg hover:bg-red-700 transition font-semibold"
@@ -1274,10 +1325,10 @@ const LodgerDashboard = ({ user, onLogout }) => {
                     }, {
                       headers: { Authorization: `Bearer ${token}` }
                     });
-                    alert('✅ Profile updated successfully!');
+                    showSuccess('Profile updated successfully!');
                     fetchLodgerData();
                   } catch (error) {
-                    alert(error.response?.data?.error || 'Failed to update profile');
+                    showError(error.response?.data?.error || 'Failed to update profile');
                   }
                 }}
                 className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
@@ -1348,12 +1399,12 @@ const LodgerDashboard = ({ user, onLogout }) => {
                   <button
                     onClick={async () => {
                       if (!photoIdFile) {
-                        alert('Please select a file to upload');
+                        showError('Please select a file to upload');
                         return;
                       }
 
                       if (!newIdExpiry) {
-                        alert('Please enter the ID expiry date');
+                        showError('Please enter the ID expiry date');
                         return;
                       }
 
@@ -1370,13 +1421,13 @@ const LodgerDashboard = ({ user, onLogout }) => {
                           }
                         });
 
-                        alert('✅ Photo ID uploaded successfully!');
+                        showSuccess('Photo ID uploaded successfully!');
                         setPhotoIdFile(null);
                         setPhotoIdPreview(null);
                         setNewIdExpiry('');
                         fetchLodgerData();
                       } catch (error) {
-                        alert(error.response?.data?.error || 'Failed to upload photo ID');
+                        showError(error.response?.data?.error || 'Failed to upload photo ID');
                       }
                     }}
                     className="mt-4 px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition font-semibold"
@@ -1409,11 +1460,11 @@ const LodgerDashboard = ({ user, onLogout }) => {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
                     <p className="text-gray-900">
-                      {new Date(tenancy.start_date).toLocaleDateString('en-GB', {
+                      {tenancy.start_date ? new Date(tenancy.start_date).toLocaleDateString('en-GB', {
                         day: 'numeric',
                         month: 'long',
                         year: 'numeric'
-                      })}
+                      }) : 'N/A'}
                     </p>
                   </div>
                   <div>
@@ -1482,7 +1533,7 @@ const LodgerDashboard = ({ user, onLogout }) => {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Start Date</p>
-                    <p className="font-medium">{new Date(tenancy.start_date).toLocaleDateString()}</p>
+                    <p className="font-medium">{tenancy.start_date ? new Date(tenancy.start_date).toLocaleDateString() : 'N/A'}</p>
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Initial Term</p>
@@ -1494,12 +1545,12 @@ const LodgerDashboard = ({ user, onLogout }) => {
                   </div>
                   <div>
                     <p className="text-sm text-gray-600">Initial Payment</p>
-                    <p className="font-medium">£{tenancy.initial_payment}</p>
+                    <p className="font-medium">£{tenancy.initial_payment || 0}</p>
                   </div>
                   {tenancy.deposit_applicable && (
                     <div>
                       <p className="text-sm text-gray-600">Deposit</p>
-                      <p className="font-medium">£{tenancy.deposit_amount}</p>
+                      <p className="font-medium">£{tenancy.deposit_amount || 0}</p>
                     </div>
                   )}
                 </div>
@@ -1524,11 +1575,11 @@ const LodgerDashboard = ({ user, onLogout }) => {
                     <p><strong>PROPERTY:</strong> <AddressDisplay address={tenancy.address} /></p>
                     <p><strong>ROOM:</strong> {tenancy.room_description || 'Means the room or rooms in the Property which the Householder allocates to the Lodger'}</p>
                     <p><strong>SHARED AREAS:</strong> {tenancy.shared_areas || 'Entrance hall, staircase and landings, kitchen for cooking and storage, lavatory and bathroom, sitting room, garden (where applicable)'}</p>
-                    <p><strong>HOUSEHOLDER (Landlord):</strong> {user.fullName}'s Landlord</p>
+                    <p><strong>HOUSEHOLDER (Landlord):</strong> {tenancy.landlord_name || 'N/A'}</p>
                     <p><strong>LODGER:</strong> {user.fullName}</p>
-                    <p><strong>START DATE:</strong> {new Date(tenancy.start_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' })}</p>
+                    <p><strong>START DATE:</strong> {tenancy.start_date ? new Date(tenancy.start_date).toLocaleDateString('en-GB', { month: 'long', year: 'numeric' }) : 'N/A'}</p>
                     <p><strong>TERM:</strong> {tenancy.initial_term_months} Months Rolling Contract until Terminated by either party</p>
-                    <p><strong>INITIAL PAYMENT:</strong> £{tenancy.initial_payment} (current and advance payment)</p>
+                    <p><strong>INITIAL PAYMENT:</strong> £{tenancy.initial_payment || 0} (current and advance payment)</p>
                     <p><strong>ACCOMMODATION PAYMENT:</strong> £{calculateRentPerCycle(tenancy.monthly_rent, tenancy.payment_cycle_days, tenancy.payment_type).toFixed(2)} {getPaymentPeriodText(tenancy.payment_frequency, tenancy.payment_type, tenancy.payment_day_of_month)}</p>
                     <p><strong>PAYMENT DAY:</strong> The day of signing this agreement</p>
                     <p><strong>DEPOSIT:</strong> £{tenancy.deposit_amount || 0} {tenancy.deposit_applicable ? '(Applicable - Yes)' : '(Not Applicable - No)'}</p>

@@ -65,8 +65,11 @@ router.post('/login', async (req, res) => {
                 id: user.id,
                 email: user.email,
                 user_type: user.user_type,
+                userType: user.user_type,
                 full_name: user.full_name,
+                fullName: user.full_name,
                 phone: user.phone,
+                phoneNumber: user.phone,
                 address: {
                     house_number: user.house_number,
                     street_name: user.street_name,
@@ -174,7 +177,11 @@ router.post('/register', async (req, res) => {
                 id: user.id,
                 email: user.email,
                 user_type: user.user_type,
-                full_name: user.full_name
+                userType: user.user_type,
+                full_name: user.full_name,
+                fullName: user.full_name,
+                phone: user.phone,
+                phoneNumber: user.phone
             }
         });
     } catch (error) {
@@ -196,7 +203,13 @@ router.get('/me', authenticateToken, async (req, res) => {
             [req.user.id]
         );
 
-        res.json(result.rows[0]);
+        // Transform snake_case to camelCase for frontend
+        const user = result.rows[0];
+        res.json({
+            ...user,
+            fullName: user.full_name,
+            phoneNumber: user.phone
+        });
     } catch (error) {
         console.error('Get user error:', error);
         res.status(500).json({ error: 'Failed to get user info' });

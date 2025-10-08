@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, CreditCard, Calendar, Settings, LogOut, Bell, Plus, Eye, FileText, TrendingUp, Clock, AlertCircle, Download, AlertTriangle, DollarSign } from 'lucide-react';
+import { Home, Users, CreditCard, Calendar, Settings, LogOut, Bell, Plus, Eye, FileText, TrendingUp, Clock, AlertCircle, Download, AlertTriangle, DollarSign, X } from 'lucide-react';
 import axios from 'axios';
 import StatCard from './StatCard';
 import PaymentSchedule from './PaymentSchedule';
 import PaymentCalendar from './PaymentCalendar';
 import { API_URL } from '../config';
 import AddressDisplay from './AddressDisplay';
+import { showSuccess, showError, showWarning } from '../utils/toast';
 
 /**
  * Parse a free-text address into structured components
@@ -112,14 +113,14 @@ const DeductionsHistory = ({ tenancyId }) => {
          {},
          { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
        );
-       alert('Statement generated successfully');
+       showSuccess('Statement generated successfully');
        // Refresh
        const deductionsRes = await axios.get(`${API_URL}/api/tenancies/${tenancyId}/deductions`, {
          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` }
        });
        setTenancyDeductions(deductionsRes.data.deductions || []);
      } catch (error) {
-       alert('Failed to generate statement');
+       showError('Failed to generate statement');
      }
    };
 
@@ -468,12 +469,12 @@ const LandlordDashboard = ({ user, onLogout }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert('Reset request submitted successfully! An administrator will review your request.');
+      showSuccess('Reset request submitted successfully! An administrator will review your request.');
       setShowResetRequestModal(false);
       setResetRequestForm({ request_type: 'forgot_password', details: '' });
       fetchResetRequests(); // Refresh the list
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to submit reset request');
+      showError(error.response?.data?.error || 'Failed to submit reset request');
     }
   };
 
@@ -493,7 +494,7 @@ const LandlordDashboard = ({ user, onLogout }) => {
       setShowCreateLodger(false);
       fetchDashboardData();
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to create lodger');
+      showError(error.response?.data?.error || 'Failed to create lodger');
     }
   };
 
@@ -560,9 +561,9 @@ const LandlordDashboard = ({ user, onLogout }) => {
       });
       setShowCreateTenancy(false);
       fetchDashboardData();
-      alert('Tenancy created successfully!');
+      showSuccess('Tenancy created successfully!');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to create tenancy');
+      showError(error.response?.data?.error || 'Failed to create tenancy');
     }
   };
 
@@ -597,11 +598,11 @@ const LandlordDashboard = ({ user, onLogout }) => {
       fetchDashboardData();
 
       const immediateTermination = noticeForm.notice_period_days === 0;
-      alert(immediateTermination
+      showSuccess(immediateTermination
         ? 'IMMEDIATE TERMINATION NOTICE: The tenancy has been terminated immediately. Please contact authorities if necessary.'
         : 'Notice has been given successfully. The lodger will be notified.');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to give notice');
+      showError(error.response?.data?.error || 'Failed to give notice');
     }
   };
 
@@ -632,9 +633,9 @@ const LandlordDashboard = ({ user, onLogout }) => {
       fetchDashboardData();
       fetchBreachNotices();
 
-      alert('Breach notice issued successfully. The lodger has 7 days to remedy the breach.');
+      showSuccess('Breach notice issued successfully. The lodger has 7 days to remedy the breach.');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to issue breach notice');
+      showError(error.response?.data?.error || 'Failed to issue breach notice');
     }
   };
 
@@ -650,9 +651,9 @@ const LandlordDashboard = ({ user, onLogout }) => {
       setSelectedTenancy(null);
       fetchDashboardData();
 
-      alert('Tenancy offer cancelled successfully. The lodger has been notified.');
+      showSuccess('Tenancy offer cancelled successfully. The lodger has been notified.');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to cancel tenancy offer');
+      showError(error.response?.data?.error || 'Failed to cancel tenancy offer');
     }
   };
 
@@ -690,11 +691,11 @@ const LandlordDashboard = ({ user, onLogout }) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      alert('Breach marked as remedied successfully!');
+      showSuccess('Breach marked as remedied successfully!');
       fetchBreachNotices();
       fetchDashboardData();
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to mark breach as remedied');
+      showError(error.response?.data?.error || 'Failed to mark breach as remedied');
     }
   };
 
@@ -714,11 +715,11 @@ const LandlordDashboard = ({ user, onLogout }) => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      alert('Breach escalated to 7-day termination notice successfully!');
+      showSuccess('Breach escalated to 7-day termination notice successfully!');
       fetchBreachNotices();
       fetchDashboardData();
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to escalate breach notice');
+      showError(error.response?.data?.error || 'Failed to escalate breach notice');
     }
   };
 
@@ -748,9 +749,9 @@ const LandlordDashboard = ({ user, onLogout }) => {
       setSelectedTenancy(null);
       fetchDashboardData();
 
-      alert('Extension offer sent successfully! The lodger will be notified.');
+      showSuccess('Extension offer sent successfully! The lodger will be notified.');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to offer extension');
+      showError(error.response?.data?.error || 'Failed to offer extension');
     }
   };
 
@@ -811,9 +812,9 @@ const LandlordDashboard = ({ user, onLogout }) => {
         localStorage.setItem('user', JSON.stringify(updatedUser));
       }
 
-      alert('Profile updated successfully!');
+      showSuccess('Profile updated successfully!');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to update profile');
+      showError(error.response?.data?.error || 'Failed to update profile');
     }
   };
 
@@ -832,9 +833,9 @@ const LandlordDashboard = ({ user, onLogout }) => {
       setShowEditLodger(false);
       setEditLodger(null);
       fetchDashboardData();
-      alert('Lodger information updated successfully!');
+      showSuccess('Lodger information updated successfully!');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to update lodger');
+      showError(error.response?.data?.error || 'Failed to update lodger');
     }
   };
 
@@ -856,10 +857,10 @@ const LandlordDashboard = ({ user, onLogout }) => {
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
 
-      alert('Backup downloaded successfully!');
+      showSuccess('Backup downloaded successfully!');
     } catch (error) {
       console.error('Backup error:', error);
-      alert(error.response?.data?.error || 'Failed to create backup');
+      showError(error.response?.data?.error || 'Failed to create backup');
     }
   };
 
@@ -884,13 +885,13 @@ const LandlordDashboard = ({ user, onLogout }) => {
         }
       });
 
-      alert(response.data.message + '\n\n' + (response.data.note || ''));
+      showSuccess(response.data.message + (response.data.note ? '\n\n' + response.data.note : ''));
 
       // Refresh the page to show updated data
       window.location.reload();
     } catch (error) {
       console.error('Restore error:', error);
-      alert(error.response?.data?.error || 'Failed to restore backup');
+      showError(error.response?.data?.error || 'Failed to restore backup');
     } finally {
       e.target.value = '';
     }
@@ -898,12 +899,12 @@ const LandlordDashboard = ({ user, onLogout }) => {
 
   const handleFactoryReset = async () => {
     if (!factoryResetPassword) {
-      alert('Please enter your password to confirm factory reset');
+      showError('Please enter your password to confirm factory reset');
       return;
     }
 
     if (confirmText !== 'FACTORY RESET') {
-      alert('Please type "FACTORY RESET" exactly to confirm');
+      showError('Please type "FACTORY RESET" exactly to confirm');
       return;
     }
 
@@ -933,7 +934,7 @@ const LandlordDashboard = ({ user, onLogout }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert(response.data.message + '\n\n' + (response.data.note || ''));
+      showSuccess(response.data.message + (response.data.note ? '\n\n' + response.data.note : ''));
 
       // Clear fields
       setFactoryResetPassword('');
@@ -948,7 +949,7 @@ const LandlordDashboard = ({ user, onLogout }) => {
 
     } catch (error) {
       console.error('Factory reset error:', error);
-      alert(error.response?.data?.error || 'Failed to perform factory reset');
+      showError(error.response?.data?.error || 'Failed to perform factory reset');
       setFactoryResetPassword('');
       setConfirmText('');
     }
@@ -978,7 +979,7 @@ const LandlordDashboard = ({ user, onLogout }) => {
         }
       );
 
-      alert('✅ Payment confirmed successfully!');
+      showSuccess('Payment confirmed successfully!');
       setShowConfirmPaymentModal(false);
       setSelectedPayment(null);
       setPaymentConfirmForm({
@@ -990,7 +991,7 @@ const LandlordDashboard = ({ user, onLogout }) => {
       fetchDashboardData(); // Refresh the data
     } catch (error) {
       console.error('Payment confirmation error:', error);
-      alert(error.response?.data?.error || 'Failed to confirm payment');
+      showError(error.response?.data?.error || 'Failed to confirm payment');
     }
   };
 
@@ -1009,10 +1010,10 @@ const LandlordDashboard = ({ user, onLogout }) => {
         }
       );
 
-      alert('✅ Payment reminder sent successfully!');
+      showSuccess('Payment reminder sent successfully!');
     } catch (error) {
       console.error('Send reminder error:', error);
-      alert(error.response?.data?.error || 'Failed to send payment reminder');
+      showError(error.response?.data?.error || 'Failed to send payment reminder');
     }
   };
 
@@ -2224,7 +2225,7 @@ const LandlordDashboard = ({ user, onLogout }) => {
                                     setShowDeductionModal(true);
                                   } catch (error) {
                                     console.error('Error fetching available funds:', error);
-                                    alert('Failed to load deduction form');
+                                    showError('Failed to load deduction form');
                                   }
                                 }}
                                 className="flex items-center justify-center gap-2 px-6 py-4 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition font-semibold text-base"
@@ -3028,11 +3029,11 @@ const LandlordDashboard = ({ user, onLogout }) => {
                           {},
                           { headers: { Authorization: `Bearer ${token}` }}
                         );
-                        alert('Agreement approved and PDF generated successfully!');
+                        showSuccess('Agreement approved and PDF generated successfully!');
                         setShowTenancyModal(false);
                         fetchDashboardData();
                       } catch (error) {
-                        alert(error.response?.data?.error || 'Failed to approve agreement');
+                        showError(error.response?.data?.error || 'Failed to approve agreement');
                       }
                     }}
                     className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
@@ -3775,12 +3776,12 @@ const LandlordDashboard = ({ user, onLogout }) => {
                   { headers: { Authorization: `Bearer ${localStorage.getItem('token')}` } }
                 );
 
-                alert('Deduction recorded successfully');
+                showSuccess('Deduction recorded successfully');
                 setShowDeductionModal(false);
                 fetchDashboardData();
               } catch (error) {
                 console.error('Error creating deduction:', error);
-                alert(error.response?.data?.error || 'Failed to create deduction');
+                showError(error.response?.data?.error || 'Failed to create deduction');
               }
             }} className="p-6 space-y-5">
 

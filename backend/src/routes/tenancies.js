@@ -247,12 +247,12 @@ router.post('/', authenticateToken, requireRole('landlord', 'admin'), async (req
 
         const tenancy = tenancyResult.rows[0];
 
-        // Generate payment schedule - create 24 months of payments for continuous schedule
-        // Payment schedule continues until notice is given
+        // Generate payment schedule based on initial term + buffer
+        // Payment schedule auto-extends via extendPaymentSchedule when < 6 months remain
         const schedule = paymentCalculator.generatePaymentSchedule(
             new Date(start_date),
             parseFloat(monthly_rent),
-            24,  // Generate 2 years of payments
+            initial_term_months + 2,  // Initial term + 2 month buffer
             0,   // deposit
             cycleDays,
             paymentType,
@@ -736,7 +736,7 @@ router.delete('/:id/cancel', authenticateToken, requireRole('landlord', 'admin')
              VALUES ($1, $2, $3, $4)`,
             [
                 tenancy.lodger_id,
-                'general',
+                'tenancy_cancelled',
                 'Tenancy Offer Cancelled',
                 `Your tenancy offer for ${tenancy.property_house_number} ${tenancy.property_street_name} has been cancelled by the landlord.`
             ]
@@ -761,6 +761,137 @@ router.delete('/:id/cancel', authenticateToken, requireRole('landlord', 'admin')
         res.status(500).json({ error: 'Failed to cancel tenancy offer' });
     } finally {
         client.release();
+    }
+});
+
+/**
+ * Map payment frequency to cycle days
+ * @param {string} paymentFrequency - Payment frequency
+ * @returns {number} Number of days in the payment cycle
+ */
+function mapPaymentFrequencyToDays(paymentFrequency) {
+    const frequencyMap = {
+        'weekly': 7,
+        'bi-weekly': 14,
+        'monthly': 30,
+        '4-weekly': 28
+    };
+    return frequencyMap[paymentFrequency] || 28;
+}
+
+/**
+ * Helper function to extend payment schedule if needed
+ * Automatically generates more payments when less than 6 months remain
+ */
+async function extendPaymentSchedule(tenancyId) {
+    try {
+        // Get tenancy details
+        const tenancyResult = await pool.query(
+            'SELECT * FROM tenancies WHERE id = $1',
+            [tenancyId]
+        );
+
+        if (tenancyResult.rows.length === 0) return;
+
+        const tenancy = tenancyResult.rows[0];
+
+        // Only extend if tenancy is active (not terminated)
+        if (tenancy.status !== 'active' && tenancy.status !== 'pending') {
+            return;
+        }
+
+        // Get last payment in schedule
+        const lastPaymentResult = await pool.query(
+            `SELECT * FROM payment_schedule
+             WHERE tenancy_id = $1
+             ORDER BY due_date DESC
+             LIMIT 1`,
+            [tenancyId]
+        );
+
+        if (lastPaymentResult.rows.length === 0) return;
+
+        const lastPayment = lastPaymentResult.rows[0];
+        const lastDueDate = new Date(lastPayment.due_date);
+        const today = new Date();
+
+        // Calculate months until last payment
+        const monthsUntilLast = (lastDueDate.getFullYear() - today.getFullYear()) * 12 +
+                                (lastDueDate.getMonth() - today.getMonth());
+
+        // If less than 6 months of payments remaining, generate 12 more months
+        if (monthsUntilLast < 6) {
+            console.log(`Extending payment schedule for tenancy ${tenancyId}`);
+
+            // Map payment frequency to cycle days
+            const cycleDays = mapPaymentFrequencyToDays(tenancy.payment_frequency || '4-weekly');
+
+            // Generate next 12 months of payments
+            let nextPaymentDate;
+            if (tenancy.payment_type === 'calendar') {
+                // For calendar payments, add months
+                nextPaymentDate = new Date(lastDueDate);
+                nextPaymentDate.setMonth(nextPaymentDate.getMonth() + 1);
+                nextPaymentDate.setDate(tenancy.payment_day_of_month);
+            } else {
+                // For cycle payments, add cycle days
+                nextPaymentDate = new Date(lastDueDate);
+                nextPaymentDate.setDate(nextPaymentDate.getDate() + cycleDays);
+            }
+
+            const newSchedule = paymentCalculator.generatePaymentSchedule(
+                nextPaymentDate,
+                parseFloat(tenancy.monthly_rent),
+                13,  // ~12 months of payments
+                0,   // deposit
+                cycleDays,
+                tenancy.payment_type || 'cycle',
+                tenancy.payment_day_of_month || 1
+            );
+
+            // Insert new payments with adjusted payment numbers
+            for (const payment of newSchedule) {
+                await pool.query(
+                    `INSERT INTO payment_schedule (
+                        tenancy_id, payment_number, due_date, rent_due
+                    ) VALUES ($1, $2, $3, $4)`,
+                    [tenancyId, lastPayment.payment_number + payment.paymentNumber,
+                     payment.dueDate, payment.rentDue]
+                );
+            }
+
+            console.log(`Extended payment schedule for tenancy ${tenancyId} with 13 more payments`);
+        }
+    } catch (error) {
+        console.error('Error extending payment schedule:', error);
+    }
+}
+
+/**
+ * Get payment schedule for tenancy
+ * @route GET /api/tenancies/:id/payments
+ * @auth Required
+ * @param {string} id - Tenancy ID
+ * @returns {Array} List of payments
+ */
+router.get('/:id/payments', authenticateToken, async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Automatically extend payment schedule if needed
+        await extendPaymentSchedule(id);
+
+        const result = await pool.query(
+            `SELECT * FROM payment_schedule
+             WHERE tenancy_id = $1
+             ORDER BY payment_number ASC`,
+            [id]
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get payments error:', error);
+        res.status(500).json({ error: 'Failed to get payments' });
     }
 });
 

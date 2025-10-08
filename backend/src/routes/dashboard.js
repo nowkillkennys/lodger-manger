@@ -117,11 +117,14 @@ router.get('/lodger', authenticateToken, requireRole('lodger'), async (req, res)
 
         const tenancy = tenancyResult.rows[0];
 
-        // Calculate current balance (sum of all balances in payment schedule)
+        // Get current balance from last payment that's due (not future payments)
         const balanceResult = await pool.query(
-            `SELECT COALESCE(SUM(balance), 0) as total_balance
+            `SELECT COALESCE(balance, 0) as total_balance
              FROM payment_schedule
-             WHERE tenancy_id = $1`,
+             WHERE tenancy_id = $1
+             AND (due_date <= CURRENT_DATE OR payment_status IN ('paid', 'submitted', 'confirmed'))
+             ORDER BY payment_number DESC
+             LIMIT 1`,
             [tenancy.id]
         );
 

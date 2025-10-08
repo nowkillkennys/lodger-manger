@@ -3,6 +3,7 @@ import { ArrowLeft, Calendar, DollarSign, CheckCircle, Clock, AlertCircle, X } f
 import axios from 'axios';
 import { API_URL } from '../config';
 import AddressDisplay from './AddressDisplay';
+import { showSuccess, showError } from '../utils/toast';
 
 
 const PaymentSchedule = ({ tenancy, onBack }) => {
@@ -40,7 +41,7 @@ const PaymentSchedule = ({ tenancy, onBack }) => {
       setPayments(response.data);
     } catch (error) {
       console.error('Failed to fetch payments:', error);
-      alert('Failed to load payment schedule');
+      showError('Failed to load payment schedule');
     } finally {
       setLoading(false);
     }
@@ -68,9 +69,9 @@ const PaymentSchedule = ({ tenancy, onBack }) => {
         notes: ''
       });
       fetchPayments();
-      alert('Payment recorded successfully!');
+      showSuccess('Payment recorded successfully!');
     } catch (error) {
-      alert(error.response?.data?.error || 'Failed to record payment');
+      showError(error.response?.data?.error || 'Failed to record payment');
     }
   };
 

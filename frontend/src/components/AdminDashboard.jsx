@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Home, Users, Settings, LogOut, Bell, Plus, Eye, FileText, TrendingUp, Clock, AlertCircle, Download, AlertTriangle, DollarSign, Shield, UserCheck, UserX, Key, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import { API_URL } from '../config';
+import { showSuccess, showError } from '../utils/toast';
 
 /**
  * Admin Dashboard Component
@@ -92,12 +93,12 @@ const AdminDashboard = ({ user, onLogout }) => {
 
   const handleFactoryReset = async () => {
     if (!factoryResetPassword) {
-      alert('Please enter your password to confirm factory reset');
+      showError('Please enter your password to confirm factory reset');
       return;
     }
 
     if (confirmText !== 'FACTORY RESET') {
-      alert('Please type "FACTORY RESET" exactly to confirm');
+      showError('Please type "FACTORY RESET" exactly to confirm');
       return;
     }
 
@@ -127,7 +128,7 @@ const AdminDashboard = ({ user, onLogout }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert(response.data.message + '\n\n' + (response.data.note || ''));
+      showSuccess(response.data.message + (response.data.note ? '\n\n' + response.data.note : ''));
 
       // Clear fields
       setFactoryResetPassword('');
@@ -142,7 +143,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
     } catch (error) {
       console.error('Factory reset error:', error);
-      alert(error.response?.data?.error || 'Failed to perform factory reset');
+      showError(error.response?.data?.error || 'Failed to perform factory reset');
       setFactoryResetPassword('');
       setConfirmText('');
     }
@@ -157,11 +158,11 @@ const AdminDashboard = ({ user, onLogout }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert(`Reset request ${action} successfully`);
+      showSuccess(`Reset request ${action} successfully`);
       fetchAdminData(); // Refresh data
     } catch (error) {
       console.error('Reset request action error:', error);
-      alert(error.response?.data?.error || 'Failed to process reset request');
+      showError(error.response?.data?.error || 'Failed to process reset request');
     }
   };
 
@@ -215,13 +216,13 @@ const AdminDashboard = ({ user, onLogout }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert('User updated successfully');
+      showSuccess('User updated successfully');
       setShowEditModal(false);
       setEditingUser(null);
       fetchAdminData(); // Refresh data
     } catch (error) {
       console.error('Update user error:', error);
-      alert(error.response?.data?.error || 'Failed to update user');
+      showError(error.response?.data?.error || 'Failed to update user');
     }
   };
 
@@ -233,7 +234,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
   const handleConfirmPasswordReset = async () => {
     if (!newPassword || newPassword.length < 6) {
-      alert('Password must be at least 6 characters long');
+      showError('Password must be at least 6 characters long');
       return;
     }
 
@@ -245,13 +246,13 @@ const AdminDashboard = ({ user, onLogout }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert('Password reset successfully');
+      showSuccess('Password reset successfully');
       setShowPasswordResetModal(false);
       setEditingUser(null);
       setNewPassword('');
     } catch (error) {
       console.error('Reset password error:', error);
-      alert(error.response?.data?.error || 'Failed to reset password');
+      showError(error.response?.data?.error || 'Failed to reset password');
     }
   };
 
@@ -264,11 +265,11 @@ const AdminDashboard = ({ user, onLogout }) => {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert(`User ${!user.is_active ? 'activated' : 'deactivated'} successfully`);
+      showSuccess(`User ${!user.is_active ? 'activated' : 'deactivated'} successfully`);
       fetchAdminData(); // Refresh data
     } catch (error) {
       console.error('Toggle user status error:', error);
-      alert(error.response?.data?.error || 'Failed to update user status');
+      showError(error.response?.data?.error || 'Failed to update user status');
     }
   };
 
@@ -760,7 +761,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                           link.remove();
                           window.URL.revokeObjectURL(url);
                         } catch (error) {
-                          alert('Failed to download backup: ' + (error.response?.data?.error || error.message));
+                          showError('Failed to download backup: ' + (error.response?.data?.error || error.message));
                         }
                       }}
                       className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
@@ -794,7 +795,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                           link.remove();
                           window.URL.revokeObjectURL(url);
                         } catch (error) {
-                          alert('Failed to download database dump: ' + (error.response?.data?.error || error.message));
+                          showError('Failed to download database dump: ' + (error.response?.data?.error || error.message));
                         }
                       }}
                       className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"

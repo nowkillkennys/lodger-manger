@@ -570,6 +570,15 @@ router.post('/:id/notice', authenticateToken, requireRole('landlord', 'admin'), 
             }
         }
 
+        // Delete all future pending payments beyond termination date
+        await client.query(
+            `DELETE FROM payment_schedule
+             WHERE tenancy_id = $1
+             AND due_date > $2
+             AND payment_status = 'pending'`,
+            [tenancyId, effectiveDate]
+        );
+
         // If immediate termination, update tenancy status
         if (notice_period_days === 0) {
             await client.query(
@@ -937,6 +946,15 @@ router.post('/notices/:id/escalate', authenticateToken, requireRole('landlord', 
                 );
             }
         }
+
+        // Delete all future pending payments beyond termination date
+        await client.query(
+            `DELETE FROM payment_schedule
+             WHERE tenancy_id = $1
+             AND due_date > $2
+             AND payment_status = 'pending'`,
+            [notice.tenancy_id, terminationDeadline]
+        );
 
         // Create notification for lodger
         await client.query(

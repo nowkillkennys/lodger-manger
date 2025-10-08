@@ -9,6 +9,25 @@ const { connectWithRetry } = require('./src/config/database');
 const routes = require('./src/routes');
 const { initializeCronJobs } = require('./src/jobs/cronJobs');
 
+const Sentry = require("@sentry/node");
+
+Sentry.init({
+  dsn: "https://ed827835ab76ff630f248d5e5a979b24@o4510150914736128.ingest.de.sentry.io/4510151085916240",
+  // Setting this option to true will send default PII data to Sentry.
+  // For example, automatic IP address collection on events
+  sendDefaultPii: true,
+  integrations: [
+    Sentry.httpIntegration(),
+    Sentry.expressIntegration()
+  ],
+  // Set tracesSampleRate to 1.0 to capture 100%
+  // of transactions for performance monitoring.
+  // We recommend adjusting this value in production
+  tracesSampleRate: 1.0,
+  // Set `tracePropagationTargets` to control for which URLs distributed tracing should be enabled
+  tracePropagationTargets: ["localhost", /^https:\/\/yourserver\.io\/api/]
+});
+
 const app = express();
 
 // Middleware
