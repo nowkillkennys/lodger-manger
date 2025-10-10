@@ -29,9 +29,44 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [newPassword, setNewPassword] = useState('');
 
+  // Announcements state
+  const [announcements, setAnnouncements] = useState([]);
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [announcementForm, setAnnouncementForm] = useState({
+    title: '', message: '', type: 'info', target_audience: 'all', expires_at: ''
+  });
+
+  // Broadcast state
+  const [showBroadcastModal, setShowBroadcastModal] = useState(false);
+  const [broadcastForm, setBroadcastForm] = useState({
+    subject: '', message: '', target_role: 'all'
+  });
+
+  // Monitoring state
+  const [systemHealth, setSystemHealth] = useState(null);
+  const [userStats, setUserStats] = useState(null);
+  const [activityFeed, setActivityFeed] = useState([]);
+  const [apiAnalytics, setApiAnalytics] = useState(null);
+  const [systemLogs, setSystemLogs] = useState([]);
+  const [activityTimeRange, setActivityTimeRange] = useState('24h');
+  const [analyticsTimeRange, setAnalyticsTimeRange] = useState('24h');
+  const [logTimeRange, setLogTimeRange] = useState('24h');
+  const [activeMonitoringTab, setActiveMonitoringTab] = useState('health');
+  const [searchFilters, setSearchFilters] = useState({
+    search: '', role: '', status: ''
+  });
+
   useEffect(() => {
     fetchAdminData();
   }, []);
+
+  useEffect(() => {
+    if (activeTab === 'monitoring') {
+      fetchActivityFeed();
+      fetchApiAnalytics();
+      if (activeMonitoringTab === 'logs') fetchSystemLogs();
+    }
+  }, [activeTab, activityTimeRange, analyticsTimeRange, activeMonitoringTab, logTimeRange]);
 
   // Close notification dropdown when clicking outside
   useEffect(() => {
@@ -56,7 +91,7 @@ const AdminDashboard = ({ user, onLogout }) => {
         axios.get(`${API_URL}/api/admin/landlords-with-lodgers`, config),
         axios.get(`${API_URL}/api/admin/reset-requests`, config),
         axios.get(`${API_URL}/api/notifications`, config),
-        axios.get(`${API_URL}/api/admin/users`, config)
+        axios.get(`${API_URL}/api/users`, config)
       ]);
 
       // Handle system stats
@@ -207,7 +242,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   const handleSaveUser = async () => {
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`${API_URL}/api/admin/users/${editingUser.id}`, {
+      await axios.put(`${API_URL}/api/users/${editingUser.id}`, {
         email: editingUser.email,
         full_name: editingUser.full_name,
         phone: editingUser.phone,
@@ -240,7 +275,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`${API_URL}/api/admin/users/${editingUser.id}/reset-password`, {
+      await axios.post(`${API_URL}/api/users/${editingUser.id}/reset-password`, {
         new_password: newPassword
       }, {
         headers: { Authorization: `Bearer ${token}` }
@@ -259,7 +294,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   const handleToggleUserStatus = async (user) => {
     try {
       const token = localStorage.getItem('token');
-      await axios.put(`${API_URL}/api/admin/users/${user.id}`, {
+      await axios.put(`${API_URL}/api/users/${user.id}`, {
         is_active: !user.is_active
       }, {
         headers: { Authorization: `Bearer ${token}` }
@@ -270,6 +305,105 @@ const AdminDashboard = ({ user, onLogout }) => {
     } catch (error) {
       console.error('Toggle user status error:', error);
       showError(error.response?.data?.error || 'Failed to update user status');
+    }
+  };
+
+  // Announcement handlers
+  const handleCreateAnnouncement = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${API_URL}/api/announcements`, announcementForm, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      showSuccess('Announcement created successfully');
+      setShowAnnouncementModal(false);
+      setAnnouncementForm({ title: '', message: '', type: 'info', target_audience: 'all', expires_at: '' });
+      fetchAnnouncementsData();
+    } catch (error) {
+      console.error('Create announcement error:', error);
+      showError(error.response?.data?.error || 'Failed to create announcement');
+    }
+  };
+
+  const handleSendBroadcast = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.post(`${API_URL}/api/announcements/broadcast`, broadcastForm, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      showSuccess(`Broadcast sent to ${response.data.recipient_count} users`);
+      setShowBroadcastModal(false);
+      setBroadcastForm({ subject: '', message: '', target_role: 'all' });
+    } catch (error) {
+      console.error('Send broadcast error:', error);
+      showError(error.response?.data?.error || 'Failed to send broadcast');
+    }
+  };
+
+  const fetchAnnouncementsData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/api/announcements/all`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAnnouncements(response.data);
+    } catch (error) {
+      console.error('Fetch announcements error:', error);
+    }
+  };
+
+  const fetchMonitoringData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const [healthRes, statsRes] = await Promise.all([
+        axios.get(`${API_URL}/api/monitoring/health`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API_URL}/api/monitoring/users/stats`, { headers: { Authorization: `Bearer ${token}` } })
+      ]);
+      setSystemHealth(healthRes.data);
+      setUserStats(statsRes.data);
+    } catch (error) {
+      console.error('Fetch monitoring data error:', error);
+    }
+  };
+
+  const fetchActivityFeed = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/api/monitoring/activity-feed?limit=50&time_range=${activityTimeRange}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setActivityFeed(response.data.activities || []);
+    } catch (error) {
+      console.error('Fetch activity feed error:', error);
+    }
+  };
+
+  const fetchApiAnalytics = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const [analyticsRes, summaryRes] = await Promise.all([
+        axios.get(`${API_URL}/api/monitoring/analytics?time_range=${analyticsTimeRange}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API_URL}/api/monitoring/analytics/summary?time_range=${analyticsTimeRange}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+      setApiAnalytics(summaryRes.data);
+    } catch (error) {
+      console.error('Fetch API analytics error:', error);
+    }
+  };
+
+  const fetchSystemLogs = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/api/monitoring/logs?time_range=${logTimeRange}&limit=100`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setSystemLogs(response.data.logs || []);
+    } catch (error) {
+      console.error('Fetch system logs error:', error);
     }
   };
 
@@ -409,12 +543,12 @@ const AdminDashboard = ({ user, onLogout }) => {
       <div className="max-w-7xl mx-auto px-4 py-8">
         {/* Tab Navigation */}
         <div className="mb-6 border-b border-gray-200">
-          <nav className="flex gap-8">
-            {['overview', 'users', 'reset-requests', 'settings'].map((tab) => (
+          <nav className="flex gap-8 overflow-x-auto">
+            {['overview', 'users', 'announcements', 'monitoring', 'reset-requests', 'settings'].map((tab) => (
               <button
                 key={tab}
                 onClick={() => setActiveTab(tab)}
-                className={`px-1 py-4 border-b-2 transition font-medium capitalize ${
+                className={`px-1 py-4 border-b-2 transition font-medium capitalize whitespace-nowrap ${
                   activeTab === tab
                     ? 'border-red-600 text-red-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
@@ -538,6 +672,39 @@ const AdminDashboard = ({ user, onLogout }) => {
                 <Plus className="w-5 h-5" />
                 Add User
               </button>
+            </div>
+
+            {/* Search Filters */}
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Search & Filter Users</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <input
+                  type="text"
+                  placeholder="Search by email or name..."
+                  value={searchFilters.search}
+                  onChange={(e) => setSearchFilters({...searchFilters, search: e.target.value})}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                />
+                <select
+                  value={searchFilters.role}
+                  onChange={(e) => setSearchFilters({...searchFilters, role: e.target.value})}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">All Roles</option>
+                  <option value="landlord">Landlords</option>
+                  <option value="lodger">Lodgers</option>
+                  <option value="admin">Admins</option>
+                </select>
+                <select
+                  value={searchFilters.status}
+                  onChange={(e) => setSearchFilters({...searchFilters, status: e.target.value})}
+                  className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">All Status</option>
+                  <option value="active">Active</option>
+                  <option value="inactive">Inactive</option>
+                </select>
+              </div>
             </div>
 
             {users.length > 0 ? (
@@ -724,6 +891,663 @@ const AdminDashboard = ({ user, onLogout }) => {
                 <p className="text-gray-600">Account reset requests from landlords will appear here</p>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Announcements Tab */}
+        {activeTab === 'announcements' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold">Announcements & Broadcasts</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Post announcements and send messages to users
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowAnnouncementModal(true);
+                    fetchAnnouncementsData();
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                >
+                  <Plus className="w-5 h-5" />
+                  New Announcement
+                </button>
+                <button
+                  onClick={() => setShowBroadcastModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                >
+                  <Bell className="w-5 h-5" />
+                  Send Broadcast
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-lg shadow p-6">
+              <h3 className="text-lg font-semibold mb-4">Active Announcements</h3>
+              {announcements.length > 0 ? (
+                <div className="space-y-3">
+                  {announcements.map((announcement) => (
+                    <div key={announcement.id} className="border border-gray-200 rounded-lg p-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold text-gray-900">{announcement.title}</h4>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              announcement.type === 'info' ? 'bg-blue-100 text-blue-700' :
+                              announcement.type === 'warning' ? 'bg-yellow-100 text-yellow-700' :
+                              announcement.type === 'success' ? 'bg-green-100 text-green-700' :
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {announcement.type}
+                            </span>
+                            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700">
+                              {announcement.target_audience}
+                            </span>
+                          </div>
+                          <p className="text-sm text-gray-600 mb-2">{announcement.message}</p>
+                          <p className="text-xs text-gray-500">
+                            Created by {announcement.created_by_name} on {new Date(announcement.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-gray-500 text-center py-8">No announcements yet</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Monitoring Tab */}
+        {activeTab === 'monitoring' && (
+          <div className="space-y-6">
+            <div className="flex justify-between items-center">
+              <div>
+                <h2 className="text-2xl font-bold">System Monitoring</h2>
+                <p className="text-sm text-gray-600 mt-1">
+                  Monitor system health, performance, and user activity
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  fetchMonitoringData();
+                  if (activeMonitoringTab === 'activity') fetchActivityFeed();
+                  if (activeMonitoringTab === 'analytics') fetchApiAnalytics();
+                }}
+                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+              >
+                <RefreshCw className="w-5 h-5" />
+                Refresh All
+              </button>
+            </div>
+
+            {/* Monitoring Sub-navigation */}
+            <div className="bg-white rounded-lg shadow">
+              <div className="border-b border-gray-200">
+                <nav className="flex gap-1 p-1">
+                  {[
+                    { id: 'health', label: 'System Health', icon: Shield },
+                    { id: 'statistics', label: 'User Statistics', icon: Users },
+                    { id: 'activity', label: 'Recent Activity', icon: Clock },
+                    { id: 'analytics', label: 'API Analytics', icon: TrendingUp },
+                    { id: 'logs', label: 'System Logs', icon: FileText }
+                  ].map((subTab) => (
+                    <button
+                      key={subTab.id}
+                      onClick={() => setActiveMonitoringTab(subTab.id)}
+                      className={`flex items-center gap-2 px-4 py-3 rounded-md text-sm font-medium transition flex-1 justify-center ${
+                        activeMonitoringTab === subTab.id
+                          ? 'bg-indigo-100 text-indigo-700 border border-indigo-200'
+                          : 'text-gray-600 hover:text-gray-900 hover:bg-gray-50'
+                      }`}
+                    >
+                      <subTab.icon className="w-4 h-4" />
+                      {subTab.label}
+                    </button>
+                  ))}
+                </nav>
+              </div>
+
+              <div className="p-6">
+                {/* System Health Sub-tab */}
+                {activeMonitoringTab === 'health' && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold">System Health Overview</h3>
+                      <button
+                        onClick={fetchMonitoringData}
+                        className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition text-sm"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Refresh Health
+                      </button>
+                    </div>
+
+                    {systemHealth ? (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-green-100 rounded-lg">
+                                <Shield className="w-5 h-5 text-green-600" />
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">System Status</p>
+                                <p className="text-xl font-bold text-green-600 capitalize">{systemHealth.status}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-blue-100 rounded-lg">
+                                <Home className="w-5 h-5 text-blue-600" />
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Database Size</p>
+                                <p className="text-xl font-bold text-blue-600">{systemHealth.database.size}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-purple-100 rounded-lg">
+                                <Clock className="w-5 h-5 text-purple-600" />
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Uptime</p>
+                                <p className="text-xl font-bold text-purple-600">{systemHealth.system.uptime_formatted}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className={`p-4 rounded-lg border ${
+                            systemHealth.system.memory.used_percent > 80 ? 'bg-red-50 border-red-200' :
+                            systemHealth.system.memory.used_percent > 60 ? 'bg-yellow-50 border-yellow-200' :
+                            'bg-indigo-50 border-indigo-200'
+                          }`}>
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-lg ${
+                                systemHealth.system.memory.used_percent > 80 ? 'bg-red-100' :
+                                systemHealth.system.memory.used_percent > 60 ? 'bg-yellow-100' :
+                                'bg-indigo-100'
+                              }`}>
+                                <div className={`w-5 h-5 ${
+                                  systemHealth.system.memory.used_percent > 80 ? 'text-red-600' :
+                                  systemHealth.system.memory.used_percent > 60 ? 'text-yellow-600' :
+                                  'text-indigo-600'
+                                }`}>
+                                  💾
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">RAM Usage</p>
+                                <p className={`text-xl font-bold ${
+                                  systemHealth.system.memory.used_percent > 80 ? 'text-red-600' :
+                                  systemHealth.system.memory.used_percent > 60 ? 'text-yellow-600' :
+                                  'text-indigo-600'
+                                }`}>
+                                  {systemHealth.system.memory.used_mb}MB / {systemHealth.system.memory.total_mb}MB
+                                </p>
+                                <p className={`text-sm ${
+                                  systemHealth.system.memory.used_percent > 80 ? 'text-red-600' :
+                                  systemHealth.system.memory.used_percent > 60 ? 'text-yellow-600' :
+                                  'text-indigo-600'
+                                }`}>
+                                  {systemHealth.system.memory.used_percent}%
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className={`p-4 rounded-lg border ${
+                            systemHealth.system.cpu.usage_percent > 70 ? 'bg-red-50 border-red-200' :
+                            systemHealth.system.cpu.usage_percent > 50 ? 'bg-yellow-50 border-yellow-200' :
+                            'bg-cyan-50 border-cyan-200'
+                          }`}>
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-lg ${
+                                systemHealth.system.cpu.usage_percent > 70 ? 'bg-red-100' :
+                                systemHealth.system.cpu.usage_percent > 50 ? 'bg-yellow-100' :
+                                'bg-cyan-100'
+                              }`}>
+                                <div className={`w-5 h-5 ${
+                                  systemHealth.system.cpu.usage_percent > 70 ? 'text-red-600' :
+                                  systemHealth.system.cpu.usage_percent > 50 ? 'text-yellow-600' :
+                                  'text-cyan-600'
+                                }`}>
+                                  ⚡
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">CPU Usage</p>
+                                <p className={`text-xl font-bold ${
+                                  systemHealth.system.cpu.usage_percent > 70 ? 'text-red-600' :
+                                  systemHealth.system.cpu.usage_percent > 50 ? 'text-yellow-600' :
+                                  'text-cyan-600'
+                                }`}>
+                                  {systemHealth.system.cpu.usage_percent}%
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* System Resources Row */}
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className={`p-4 rounded-lg border ${
+                            systemHealth.system.disk.used_percent > 85 ? 'bg-red-50 border-red-200' :
+                            systemHealth.system.disk.used_percent > 70 ? 'bg-yellow-50 border-yellow-200' :
+                            'bg-emerald-50 border-emerald-200'
+                          }`}>
+                            <div className="flex items-center gap-3">
+                              <div className={`p-2 rounded-lg ${
+                                systemHealth.system.disk.used_percent > 85 ? 'bg-red-100' :
+                                systemHealth.system.disk.used_percent > 70 ? 'bg-yellow-100' :
+                                'bg-emerald-100'
+                              }`}>
+                                <div className={`w-5 h-5 ${
+                                  systemHealth.system.disk.used_percent > 85 ? 'text-red-600' :
+                                  systemHealth.system.disk.used_percent > 70 ? 'text-yellow-600' :
+                                  'text-emerald-600'
+                                }`}>
+                                  💿
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Disk Usage</p>
+                                <p className={`text-xl font-bold ${
+                                  systemHealth.system.disk.used_percent > 85 ? 'text-red-600' :
+                                  systemHealth.system.disk.used_percent > 70 ? 'text-yellow-600' :
+                                  'text-emerald-600'
+                                }`}>
+                                  {systemHealth.system.disk.used_gb}GB / {systemHealth.system.disk.total_gb}GB
+                                </p>
+                                <p className={`text-sm ${
+                                  systemHealth.system.disk.used_percent > 85 ? 'text-red-600' :
+                                  systemHealth.system.disk.used_percent > 70 ? 'text-yellow-600' :
+                                  'text-emerald-600'
+                                }`}>
+                                  {systemHealth.system.disk.used_percent}% used
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="p-4 bg-gray-50 rounded-lg border">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-gray-100 rounded-lg">
+                                <div className="w-5 h-5 text-gray-600">🔧</div>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Node Version</p>
+                                <p className="text-lg font-semibold text-gray-900">{systemHealth.system.node_version}</p>
+                              </div>
+                            </div>
+                          </div>
+                          <div className="p-4 bg-gray-50 rounded-lg border">
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-gray-100 rounded-lg">
+                                <div className="w-5 h-5 text-gray-600">🖥️</div>
+                              </div>
+                              <div>
+                                <p className="text-sm text-gray-600">Platform</p>
+                                <p className="text-lg font-semibold text-gray-900 capitalize">{systemHealth.system.platform}</p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="text-center p-4 bg-gray-50 rounded-lg border">
+                            <Users className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                            <p className="text-sm text-gray-600">Users</p>
+                            <p className="text-lg font-semibold">{systemHealth.database.tables.users_count}</p>
+                          </div>
+                          <div className="text-center p-4 bg-gray-50 rounded-lg border">
+                            <Home className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                            <p className="text-sm text-gray-600">Tenancies</p>
+                            <p className="text-lg font-semibold">{systemHealth.database.tables.tenancies_count}</p>
+                          </div>
+                          <div className="text-center p-4 bg-gray-50 rounded-lg border">
+                            <DollarSign className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                            <p className="text-sm text-gray-600">Payments</p>
+                            <p className="text-lg font-semibold">{systemHealth.database.tables.payments_count}</p>
+                          </div>
+                          <div className="text-center p-4 bg-gray-50 rounded-lg border">
+                            <FileText className="w-6 h-6 mx-auto mb-2 text-gray-600" />
+                            <p className="text-sm text-gray-600">Notices</p>
+                            <p className="text-lg font-semibold">{systemHealth.database.tables.notices_count}</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <Shield className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>Loading system health...</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* User Statistics Sub-tab */}
+                {activeMonitoringTab === 'statistics' && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold">User Statistics</h3>
+                      <button
+                        onClick={fetchMonitoringData}
+                        className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition text-sm"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Refresh Stats
+                      </button>
+                    </div>
+
+                    {userStats ? (
+                      <>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <div className="p-4 border border-gray-200 rounded-lg">
+                            <p className="text-sm text-gray-600">Total Users</p>
+                            <p className="text-2xl font-bold text-gray-900">{userStats.total_users}</p>
+                          </div>
+                          <div className="p-4 border border-gray-200 rounded-lg">
+                            <p className="text-sm text-gray-600">Active Users</p>
+                            <p className="text-2xl font-bold text-green-600">{userStats.active_users}</p>
+                          </div>
+                          <div className="p-4 border border-gray-200 rounded-lg">
+                            <p className="text-sm text-gray-600">New This Week</p>
+                            <p className="text-2xl font-bold text-blue-600">{userStats.new_this_week}</p>
+                          </div>
+                          <div className="p-4 border border-gray-200 rounded-lg">
+                            <p className="text-sm text-gray-600">New This Month</p>
+                            <p className="text-2xl font-bold text-purple-600">{userStats.new_this_month}</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-4">
+                          <div className="text-center p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <Users className="w-6 h-6 mx-auto mb-2 text-blue-600" />
+                            <p className="text-sm text-gray-600">Landlords</p>
+                            <p className="text-lg font-semibold text-blue-700">{userStats.landlords}</p>
+                          </div>
+                          <div className="text-center p-4 bg-green-50 rounded-lg border border-green-200">
+                            <UserCheck className="w-6 h-6 mx-auto mb-2 text-green-600" />
+                            <p className="text-sm text-gray-600">Lodgers</p>
+                            <p className="text-lg font-semibold text-green-700">{userStats.lodgers}</p>
+                          </div>
+                          <div className="text-center p-4 bg-red-50 rounded-lg border border-red-200">
+                            <Shield className="w-6 h-6 mx-auto mb-2 text-red-600" />
+                            <p className="text-sm text-gray-600">Admins</p>
+                            <p className="text-lg font-semibold text-red-700">{userStats.admins}</p>
+                          </div>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <Users className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>Loading user statistics...</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Recent Activity Sub-tab */}
+                {activeMonitoringTab === 'activity' && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold">Recent Activity Feed</h3>
+                      <div className="flex gap-2">
+                        <select
+                          value={activityTimeRange}
+                          onChange={(e) => setActivityTimeRange(e.target.value)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                        >
+                          <option value="1h">Last Hour</option>
+                          <option value="24h">Last 24 Hours</option>
+                          <option value="7d">Last 7 Days</option>
+                        </select>
+                        <button
+                          onClick={fetchActivityFeed}
+                          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                        >
+                          <RefreshCw className="w-5 h-5" />
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+
+                    {activityFeed.length > 0 ? (
+                      <div className="space-y-2 max-h-96 overflow-y-auto border border-gray-200 rounded-lg">
+                        {activityFeed.map((activity) => (
+                          <div key={activity.id} className="flex items-center justify-between p-4 bg-gray-50 border-b border-gray-200 last:border-b-0">
+                            <div className="flex items-center gap-3">
+                              <div className={`w-3 h-3 rounded-full ${
+                                activity.status_code >= 200 && activity.status_code < 300 ? 'bg-green-500' :
+                                activity.status_code >= 400 ? 'bg-red-500' :
+                                activity.status_code >= 300 ? 'bg-yellow-500' : 'bg-gray-500'
+                              }`}></div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    activity.method === 'GET' ? 'bg-blue-100 text-blue-700' :
+                                    activity.method === 'POST' ? 'bg-green-100 text-green-700' :
+                                    activity.method === 'PUT' ? 'bg-yellow-100 text-yellow-700' :
+                                    activity.method === 'DELETE' ? 'bg-red-100 text-red-700' :
+                                    'bg-gray-100 text-gray-700'
+                                  }`}>
+                                    {activity.method}
+                                  </span>
+                                  <span className="font-medium text-gray-900 text-sm">
+                                    {activity.endpoint}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1">
+                                  {activity.full_name && (
+                                    <span className="text-xs text-gray-600">
+                                      by {activity.full_name}
+                                    </span>
+                                  )}
+                                  {activity.user_role && (
+                                    <span className={`px-2 py-1 rounded-full text-xs ${
+                                      activity.user_role === 'admin' ? 'bg-red-100 text-red-700' :
+                                      activity.user_role === 'landlord' ? 'bg-blue-100 text-blue-700' :
+                                      'bg-green-100 text-green-700'
+                                    }`}>
+                                      {activity.user_role}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-sm font-medium text-gray-900">
+                                {activity.status_code}
+                              </div>
+                              <div className="text-xs text-gray-600">
+                                {activity.response_time_ms}ms
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {new Date(activity.created_at).toLocaleTimeString()}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <Clock className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>No recent activity</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* API Analytics Sub-tab */}
+                {activeMonitoringTab === 'analytics' && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold">API Performance Analytics</h3>
+                      <div className="flex gap-2">
+                        <select
+                          value={analyticsTimeRange}
+                          onChange={(e) => setAnalyticsTimeRange(e.target.value)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500"
+                        >
+                          <option value="24h">Last 24 Hours</option>
+                          <option value="7d">Last 7 Days</option>
+                          <option value="30d">Last 30 Days</option>
+                        </select>
+                        <button
+                          onClick={fetchApiAnalytics}
+                          className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                        >
+                          <TrendingUp className="w-5 h-5" />
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+
+                    {apiAnalytics ? (
+                      <>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+                            <p className="text-sm text-gray-600">Total Requests</p>
+                            <p className="text-2xl font-bold text-blue-600">{apiAnalytics.total_requests || 0}</p>
+                          </div>
+                          <div className="p-4 bg-green-50 rounded-lg border border-green-200">
+                            <p className="text-sm text-gray-600">Success Rate</p>
+                            <p className="text-2xl font-bold text-green-600">
+                              {apiAnalytics.total_requests ? Math.round((apiAnalytics.successful_requests / apiAnalytics.total_requests) * 100) : 0}%
+                            </p>
+                          </div>
+                          <div className="p-4 bg-red-50 rounded-lg border border-red-200">
+                            <p className="text-sm text-gray-600">Error Rate</p>
+                            <p className="text-2xl font-bold text-red-600">{apiAnalytics.error_rate || 0}%</p>
+                          </div>
+                          <div className="p-4 bg-purple-50 rounded-lg border border-purple-200">
+                            <p className="text-sm text-gray-600">Avg Response</p>
+                            <p className="text-2xl font-bold text-purple-600">{apiAnalytics.avg_response_time || 0}ms</p>
+                          </div>
+                        </div>
+
+                        {/* Top Endpoints */}
+                        {apiAnalytics.top_endpoints && apiAnalytics.top_endpoints.length > 0 && (
+                          <div>
+                            <h4 className="font-semibold text-gray-900 mb-3">Top Endpoints</h4>
+                            <div className="space-y-2">
+                              {apiAnalytics.top_endpoints.slice(0, 5).map((endpoint, index) => (
+                                <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border">
+                                  <div className="flex items-center gap-3">
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                      endpoint.method === 'GET' ? 'bg-blue-100 text-blue-700' :
+                                      endpoint.method === 'POST' ? 'bg-green-100 text-green-700' :
+                                      endpoint.method === 'PUT' ? 'bg-yellow-100 text-yellow-700' :
+                                      endpoint.method === 'DELETE' ? 'bg-red-100 text-red-700' :
+                                      'bg-gray-100 text-gray-700'
+                                    }`}>
+                                      {endpoint.method}
+                                    </span>
+                                    <span className="font-medium text-gray-900 text-sm">
+                                      {endpoint.endpoint}
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <div className="text-sm font-medium text-gray-900">
+                                      {endpoint.request_count} requests
+                                    </div>
+                                    <div className="text-xs text-gray-600">
+                                      {Math.round(endpoint.avg_response_time)}ms avg
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <TrendingUp className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>Loading API analytics...</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* System Logs Sub-tab */}
+                {activeMonitoringTab === 'logs' && (
+                  <div className="space-y-6">
+                    <div className="flex justify-between items-center">
+                      <h3 className="text-lg font-semibold">System Logs</h3>
+                      <div className="flex gap-2">
+                        <select
+                          value={logTimeRange}
+                          onChange={(e) => setLogTimeRange(e.target.value)}
+                          className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500"
+                        >
+                          <option value="1h">Last Hour</option>
+                          <option value="24h">Last 24 Hours</option>
+                          <option value="7d">Last 7 Days</option>
+                          <option value="30d">Last 30 Days</option>
+                        </select>
+                        <button
+                          onClick={fetchSystemLogs}
+                          className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+                        >
+                          <RefreshCw className="w-5 h-5" />
+                          Refresh
+                        </button>
+                      </div>
+                    </div>
+
+                    {systemLogs.length > 0 ? (
+                      <div className="space-y-2 max-h-96 overflow-y-auto border border-gray-200 rounded-lg bg-gray-900 text-gray-100 font-mono text-sm">
+                        {systemLogs.map((log, index) => (
+                          <div key={index} className={`p-3 border-b border-gray-700 last:border-b-0 ${
+                            log.level === 'ERROR' ? 'bg-red-900 bg-opacity-20' :
+                            log.level === 'WARN' ? 'bg-yellow-900 bg-opacity-20' :
+                            log.level === 'INFO' ? 'bg-blue-900 bg-opacity-20' :
+                            'bg-gray-800'
+                          }`}>
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                    log.level === 'ERROR' ? 'bg-red-600 text-white' :
+                                    log.level === 'WARN' ? 'bg-yellow-600 text-white' :
+                                    log.level === 'INFO' ? 'bg-blue-600 text-white' :
+                                    'bg-gray-600 text-white'
+                                  }`}>
+                                    {log.level}
+                                  </span>
+                                  <span className="text-gray-400 text-xs">
+                                    {new Date(log.timestamp).toLocaleString()}
+                                  </span>
+                                </div>
+                                <div className="text-gray-200 break-words">
+                                  {log.message}
+                                </div>
+                                {log.details && (
+                                  <div className="mt-2 text-gray-400 text-xs">
+                                    {typeof log.details === 'object' ? JSON.stringify(log.details, null, 2) : log.details}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="w-12 h-12 mx-auto mb-3 opacity-30" />
+                        <p>No logs available for the selected time range</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 
@@ -971,6 +1795,149 @@ const AdminDashboard = ({ user, onLogout }) => {
                     setShowPasswordResetModal(false);
                     setEditingUser(null);
                     setNewPassword('');
+                  }}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Announcement Modal */}
+        {showAnnouncementModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+              <h3 className="text-lg font-semibold mb-4">Create Announcement</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                  <input
+                    type="text"
+                    value={announcementForm.title}
+                    onChange={(e) => setAnnouncementForm({...announcementForm, title: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Announcement title"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                  <textarea
+                    value={announcementForm.message}
+                    onChange={(e) => setAnnouncementForm({...announcementForm, message: e.target.value})}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    placeholder="Announcement message"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                    <select
+                      value={announcementForm.type}
+                      onChange={(e) => setAnnouncementForm({...announcementForm, type: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="info">Info</option>
+                      <option value="warning">Warning</option>
+                      <option value="success">Success</option>
+                      <option value="error">Error</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Audience</label>
+                    <select
+                      value={announcementForm.target_audience}
+                      onChange={(e) => setAnnouncementForm({...announcementForm, target_audience: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value="all">All Users</option>
+                      <option value="landlord">Landlords Only</option>
+                      <option value="lodger">Lodgers Only</option>
+                      <option value="admin">Admins Only</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleCreateAnnouncement}
+                  disabled={!announcementForm.title || !announcementForm.message}
+                  className="flex-1 bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition disabled:bg-gray-400"
+                >
+                  Create
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAnnouncementModal(false);
+                    setAnnouncementForm({ title: '', message: '', type: 'info', target_audience: 'all', expires_at: '' });
+                  }}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Broadcast Modal */}
+        {showBroadcastModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-lg">
+              <h3 className="text-lg font-semibold mb-4">Send Broadcast Message</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Subject</label>
+                  <input
+                    type="text"
+                    value={broadcastForm.subject}
+                    onChange={(e) => setBroadcastForm({...broadcastForm, subject: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="Message subject"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Message</label>
+                  <textarea
+                    value={broadcastForm.message}
+                    onChange={(e) => setBroadcastForm({...broadcastForm, message: e.target.value})}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="Broadcast message"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Target</label>
+                  <select
+                    value={broadcastForm.target_role}
+                    onChange={(e) => setBroadcastForm({...broadcastForm, target_role: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                  >
+                    <option value="all">All Users</option>
+                    <option value="landlord">Landlords Only</option>
+                    <option value="lodger">Lodgers Only</option>
+                  </select>
+                </div>
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded">
+                  <p className="text-sm text-yellow-800">
+                    This will send a notification to all selected users
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleSendBroadcast}
+                  disabled={!broadcastForm.subject || !broadcastForm.message}
+                  className="flex-1 bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700 transition disabled:bg-gray-400"
+                >
+                  Send Broadcast
+                </button>
+                <button
+                  onClick={() => {
+                    setShowBroadcastModal(false);
+                    setBroadcastForm({ subject: '', message: '', target_role: 'all' });
                   }}
                   className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition"
                 >

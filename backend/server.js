@@ -8,6 +8,7 @@ const { PORT } = require('./src/config/env');
 const { connectWithRetry } = require('./src/config/database');
 const routes = require('./src/routes');
 const { initializeCronJobs } = require('./src/jobs/cronJobs');
+const { trackApiAnalytics } = require('./src/middleware/analytics');
 
 const Sentry = require("@sentry/node");
 
@@ -46,6 +47,9 @@ app.use(morgan('dev'));
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+
+// API Analytics Tracking
+app.use('/api', trackApiAnalytics);
 
 // API Routes
 app.use('/api', routes);

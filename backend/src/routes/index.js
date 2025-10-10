@@ -21,6 +21,8 @@ const healthRoutes = require('./health');
 const tenancyRoutes = require('./tenancies');
 const noticeRoutes = require('./notices');
 const deductionRoutes = require('./deductions');
+const announcementRoutes = require('./announcements');
+const monitoringRoutes = require('./monitoring');
 
 // Mount routes at their base paths
 router.use('/setup', setupRoutes);
@@ -36,5 +38,7 @@ router.use('/health', healthRoutes);
 router.use('/tenancies', tenancyRoutes);
 router.use('/tenancies', noticeRoutes);
 router.use('/tenancies', deductionRoutes);
+router.use('/announcements', announcementRoutes);
+router.use('/monitoring', monitoringRoutes);
 
 module.exports = router;

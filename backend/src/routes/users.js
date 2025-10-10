@@ -319,7 +319,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
 router.put('/:id', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
     try {
         const { id } = req.params;
-        const { full_name, phone, email } = req.body;
+        const { full_name, phone, email, is_active } = req.body;
 
         // Build update query dynamically
         const updates = [];
@@ -338,6 +338,10 @@ router.put('/:id', authenticateToken, requireRole('landlord', 'admin'), async (r
             updates.push(`email = $${paramCount++}`);
             values.push(email);
         }
+        if (is_active !== undefined) {
+            updates.push(`is_active = $${paramCount++}`);
+            values.push(is_active);
+        }
 
         if (updates.length === 0) {
             return res.status(400).json({ error: 'No fields to update' });
@@ -347,7 +351,7 @@ router.put('/:id', authenticateToken, requireRole('landlord', 'admin'), async (r
         values.push(id);
 
         const result = await pool.query(
-            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone`,
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone, is_active`,
             values
         );
 

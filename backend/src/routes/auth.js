@@ -31,6 +31,7 @@ router.post('/login', async (req, res) => {
         );
 
         if (result.rows.length === 0) {
+            console.log(`[${new Date().toISOString()}] LOGIN_FAILED: Invalid credentials for email: ${email}`);
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -38,8 +39,11 @@ router.post('/login', async (req, res) => {
         const validPassword = await bcrypt.compare(password, user.password_hash);
 
         if (!validPassword) {
+            console.log(`[${new Date().toISOString()}] LOGIN_FAILED: Invalid password for email: ${email}`);
             return res.status(401).json({ error: 'Invalid credentials' });
         }
+
+        console.log(`[${new Date().toISOString()}] LOGIN_SUCCESS: User ${user.email} logged in successfully`);
 
         // Update last login
         await pool.query(
@@ -117,6 +121,7 @@ router.post('/register', async (req, res) => {
         );
 
         if (existingUser.rows.length > 0) {
+            console.log(`[${new Date().toISOString()}] REGISTRATION_FAILED: Email ${email} already exists`);
             return res.status(400).json({ error: 'Email already registered' });
         }
 
@@ -158,6 +163,8 @@ router.post('/register', async (req, res) => {
         );
 
         const user = result.rows[0];
+
+        console.log(`[${new Date().toISOString()}] REGISTRATION_SUCCESS: New user registered - ${user.email} as ${user_type}`);
 
         // Generate JWT
         const token = jwt.sign(
