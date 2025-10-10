@@ -2,7 +2,7 @@
 
 A comprehensive, production-ready property management system for UK landlords and lodgers with flexible payment cycles, automated PDF agreements, and complete tenant/landlord portals.
 
-![Version](https://img.shields.io/badge/version-1.1.0-blue)
+![Version](https://img.shields.io/badge/version-1.2.0-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)
 ![React](https://img.shields.io/badge/react-18.2.0-blue)
@@ -69,10 +69,10 @@ A comprehensive, production-ready property management system for UK landlords an
 - ✅ **Payment Status** - Pending, Submitted, Paid, Overdue
 
 ### Technical Features
-- ✅ **RESTful API** - 40+ endpoints
+- ✅ **RESTful API** - 50+ endpoints with comprehensive monitoring
 - ✅ **JWT Authentication** - Secure token-based auth
 - ✅ **Role-Based Access** - Landlord, Lodger, Admin roles
-- ✅ **PostgreSQL Database** - 20+ tables with full relationships
+- ✅ **PostgreSQL Database** - 25+ tables with full relationships
 - ✅ **Automated Backups** - Scheduled database dumps
 - ✅ **Rate Limiting** - Protection against abuse
 - ✅ **File Upload Handling** - Secure photo ID and maintenance photos
@@ -80,8 +80,20 @@ A comprehensive, production-ready property management system for UK landlords an
 - ✅ **Responsive Design** - Mobile, tablet, and desktop
 - ✅ **Docker Containerization** - Easy deployment
 - ✅ **Initial Setup Wizard** - Guided first-time installation
-- ✅ **Factory Reset** - Complete system reset for development - from admin accont only 
+- ✅ **Factory Reset** - Complete system reset for development - from admin account only
 - ✅ **Rooms Management** - Property room configuration system
+
+### 🆕 Advanced Monitoring & Analytics
+- ✅ **Comprehensive System Health** - RAM, CPU, disk usage monitoring with alerts
+- ✅ **Real-time Activity Feed** - Live API call tracking with user details
+- ✅ **API Performance Analytics** - Response times, error rates, endpoint analysis
+- ✅ **Dynamic System Logs** - Color-coded log levels with real-time updates
+- ✅ **Resource Usage Alerts** - Color-coded warnings for high resource usage
+- ✅ **Organized Sub-navigation** - 5 logical monitoring sections
+- ✅ **Time Range Filtering** - 1h, 24h, 7d, 30d filtering across all views
+- ✅ **Performance Insights** - Identify bottlenecks and usage patterns
+- ✅ **Security Monitoring** - Track failed logins and suspicious activity
+- ✅ **Database Analytics** - Query performance and table statistics
 
 ---
 
@@ -995,6 +1007,117 @@ WHERE id = 'YOUR_TENANCY_ID';
 
 ---
 
+## 📊 Advanced Monitoring & Analytics System
+
+### Overview
+The system includes a comprehensive monitoring dashboard accessible via **Admin Panel → Monitoring** with 5 organized sub-sections for complete system visibility.
+
+### 🛡️ System Health Monitoring
+**Real-time resource tracking with color-coded alerts:**
+
+- **💾 RAM Usage** - Memory consumption with percentage thresholds
+- **⚡ CPU Usage** - Processor utilization monitoring
+- **💿 Disk Space** - Storage usage tracking with warnings
+- **📊 Database Metrics** - Size, latency, and table counts
+- **⏱️ System Uptime** - Continuous operation tracking
+
+**Color-coded Alerts:**
+- 🟢 **Green**: Healthy usage (<60% RAM, <50% CPU, <70% disk)
+- 🟡 **Yellow**: Warning levels (60-80% RAM, 50-70% CPU, 70-85% disk)
+- 🔴 **Red**: Critical levels (>80% RAM, >70% CPU, >85% disk)
+
+### 👥 User Statistics Dashboard
+**Comprehensive user analytics:**
+
+- **Total Users** - Complete user count across all roles
+- **Active Users** - Currently active user accounts
+- **New This Week/Month** - User registration trends
+- **Role Breakdown** - Landlords, lodgers, and admins
+- **Activity Metrics** - Login frequency and engagement
+
+### ⏰ Recent Activity Feed
+**Real-time API call monitoring:**
+
+- **Live API Tracking** - Every endpoint call logged automatically
+- **User Activity** - Track who accessed what and when
+- **Response Times** - Performance monitoring for each request
+- **Status Codes** - Success/error tracking with color indicators
+- **Time-based Filtering** - 1h, 24h, 7d, 30d views
+
+**Activity Display:**
+```
+🟢 GET /api/users          │ admin │ 245ms │ 2 min ago
+🟡 POST /api/payments      │ lodger │ 1.2s │ 5 min ago
+🔴 GET /api/auth/login     │ Error  │ 3.1s │ 12 min ago
+```
+
+### 📊 API Performance Analytics
+**Detailed performance insights:**
+
+- **Request Volume** - Total requests, success rates, error rates
+- **Response Times** - Average, minimum, maximum performance
+- **Top Endpoints** - Most frequently accessed endpoints
+- **Error Tracking** - 4xx/5xx error analysis
+- **Performance Trends** - Historical data with time filtering
+
+**Analytics Cards:**
+```
+Total Requests: 1,247    Success Rate: 94%    Error Rate: 6%    Avg Response: 156ms
+```
+
+### 📋 Dynamic System Logs
+**Real-time logging with multiple levels:**
+
+- **🔵 INFO** - General system activities and user actions
+- **🟡 WARN** - Warning conditions and high resource usage
+- **🔴 ERROR** - System errors and failures
+- **Terminal-style Display** - Dark background with monospace font
+- **Activity Correlation** - Links logs to actual user actions
+
+**Sample Log Entry:**
+```
+🔵 INFO  2025-10-10 21:41:21  API Request: GET /api/monitoring/health
+    User: admin@example.com | Response: 200 | Time: 45ms
+```
+
+### Monitoring API Endpoints
+
+```http
+GET  /api/monitoring/health              # System health with resources
+GET  /api/monitoring/users/stats         # User statistics
+GET  /api/monitoring/activity-feed       # Recent API activity
+GET  /api/monitoring/analytics           # Performance analytics
+GET  /api/monitoring/analytics/summary   # Analytics summary
+GET  /api/monitoring/logs               # System logs with filtering
+```
+
+**Query Parameters:**
+- `time_range` - 1h, 24h, 7d, 30d (default: 24h)
+- `limit` - Number of records to return (default: 100)
+
+### Benefits of the Monitoring System
+
+1. **🔍 Complete Visibility** - See everything happening in your system
+2. **⚠️ Proactive Alerts** - Get warnings before issues become critical
+3. **📈 Performance Insights** - Identify bottlenecks and optimization opportunities
+4. **🔒 Security Monitoring** - Track all user activities and failed attempts
+5. **🛠️ Debugging Tools** - Quick access to logs and error details
+6. **📊 Usage Analytics** - Understand feature usage and user behavior
+
+### Accessing the Monitoring Dashboard
+
+1. **Login as Admin** - Use `admin@example.com` credentials
+2. **Navigate to Monitoring** - Click "Monitoring" tab in admin panel
+3. **Explore Sub-sections** - Click any sub-tab to view specific metrics
+4. **Set Time Ranges** - Use dropdowns to filter by time period
+5. **Refresh Data** - Click refresh buttons for real-time updates
+
+**Default Admin Credentials:**
+- Email: `admin@example.com`
+- Password: `admin123` (set during initial setup)
+
+---
+
 ## 🆕 Recent Updates & Features
 
 ### Rooms Management System
@@ -1704,15 +1827,34 @@ This project is proprietary software for property management purposes.
 
 ---
 
-**Version:** 1.1.0
-**Last Updated:** October 7, 2025
+**Version:** 1.2.0
+**Last Updated:** October 10, 2025
 **Status:** ✅ Production Ready
 **Docker Hub:** ✅ Images Available
 **Portainer:** ✅ Fully Compatible
+**Monitoring:** ✅ Comprehensive System Included
 
 ---
 
-## 🚀 Latest Updates (v1.1.0)
+## 🚀 Latest Updates (v1.2.0)
+
+### ✅ **Comprehensive Monitoring System (v1.2.0)**
+- **5 organized monitoring sub-sections** with clean navigation
+- **Real-time system health** with RAM, CPU, and disk monitoring
+- **Live activity feed** tracking all API calls and user actions
+- **API performance analytics** with error rate and response time tracking
+- **Dynamic system logs** with color-coded levels and real-time updates
+- **Resource usage alerts** with color-coded warning thresholds
+- **Time range filtering** across all monitoring views (1h, 24h, 7d, 30d)
+- **Performance insights** for identifying bottlenecks and optimization opportunities
+
+### ✅ **Enhanced Admin Dashboard**
+- **Organized monitoring interface** with 5 logical sub-sections
+- **Real-time data updates** with manual refresh capabilities
+- **Color-coded status indicators** for quick visual assessment
+- **Comprehensive logging** throughout authentication and API systems
+- **Security monitoring** with failed login attempt tracking
+- **Database analytics** with query performance metrics
 
 ### ✅ **Docker Hub Integration**
 - Pre-built images available for instant deployment
