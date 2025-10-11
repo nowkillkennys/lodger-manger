@@ -23,6 +23,7 @@ const noticeRoutes = require('./notices');
 const deductionRoutes = require('./deductions');
 const announcementRoutes = require('./announcements');
 const monitoringRoutes = require('./monitoring');
+const factoryResetRoutes = require('./factory-reset');
 
 // Mount routes at their base paths
 router.use('/setup', setupRoutes);
@@ -40,5 +41,6 @@ router.use('/tenancies', noticeRoutes);
 router.use('/tenancies', deductionRoutes);
 router.use('/announcements', announcementRoutes);
 router.use('/monitoring', monitoringRoutes);
+router.use('/factory-reset', factoryResetRoutes);
 
 module.exports = router;

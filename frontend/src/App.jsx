@@ -9,6 +9,7 @@ import Login from './components/Login';
 import LandlordDashboard from './components/LandlordDashboard';
 import LodgerDashboard from './components/LodgerDashboard';
 import AdminDashboard from './components/AdminDashboard';
+import SystemAdminDashboard from './components/SystemAdminDashboard';
 import SetupWizard from './components/SetupWizard';
 import { API_URL } from './config';
 
@@ -93,6 +94,9 @@ function App() {
     }, []);
 
     const handleLoginSuccess = (userData, userToken) => {
+        console.log('🔑 Login Success - User data received:', userData);
+        console.log('🔑 Login Success - User type:', userData?.user_type);
+        console.log('🔑 Login Success - User email:', userData?.email);
         setUser(userData);
         setToken(userToken);
     };
@@ -132,16 +136,46 @@ function App() {
         return <Login onLoginSuccess={handleLoginSuccess} />;
     }
 
+    // Debug logging
+    console.log('🔍 App.jsx - User data:', user);
+    console.log('🔍 App.jsx - User type:', user?.user_type);
+    console.log('🔍 App.jsx - User email:', user?.email);
+    console.log('🔍 App.jsx - Available user types: sys_admin, admin, landlord, lodger');
+
+    // Debug logging
+    console.log('App.jsx - User data:', user);
+    console.log('App.jsx - User type:', user?.user_type);
+    console.log('App.jsx - User email:', user?.email);
+
     // Logged in - show appropriate dashboard
     return (
         <div className="min-h-screen bg-gray-50">
             <Toaster />
-            {user.user_type === 'admin' ? (
-                <AdminDashboard user={user} onLogout={handleLogout} />
+            {user.user_type === 'sys_admin' ? (
+                <>
+                    {console.log('App.jsx - Loading SystemAdminDashboard for sys_admin:', user.email)}
+                    <SystemAdminDashboard user={user} onLogout={handleLogout} />
+                </>
+            ) : user.user_type === 'admin' ? (
+                <>
+                    {console.log('App.jsx - Loading AdminDashboard for admin:', user.email)}
+                    <AdminDashboard user={user} onLogout={handleLogout} />
+                </>
             ) : user.user_type === 'landlord' ? (
-                <LandlordDashboard user={user} token={token} onLogout={handleLogout} />
+                <>
+                    {console.log('App.jsx - Loading LandlordDashboard for landlord:', user.email)}
+                    <LandlordDashboard user={user} token={token} onLogout={handleLogout} />
+                </>
+            ) : user.user_type === 'lodger' ? (
+                <>
+                    {console.log('App.jsx - Loading LodgerDashboard for lodger:', user.email)}
+                    <LodgerDashboard user={user} token={token} onLogout={handleLogout} />
+                </>
             ) : (
-                <LodgerDashboard user={user} token={token} onLogout={handleLogout} />
+                <>
+                    {console.log('App.jsx - Unknown user type:', user?.user_type)}
+                    <div>Unknown user type: {user?.user_type}</div>
+                </>
             )}
         </div>
     );

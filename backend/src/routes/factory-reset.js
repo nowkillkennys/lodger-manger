@@ -1,31 +1,94 @@
+const express = require('express');
+const bcrypt = require('bcryptjs');
+const { authenticateToken, requireRole } = require('../middleware/auth');
+const { connectWithRetry } = require('../config/database');
+
+const router = express.Router();
+
 /**
- * Database Initialization Script
- * Creates all required tables for the Lodger Management System
+ * Factory Reset Route - System Administrator Only
+ * POST /api/factory-reset
+ *
+ * This endpoint performs a complete database reset by:
+ * 1. Dropping all existing tables
+ * 2. Recreating the database schema
+ * 3. Creating a fresh admin account
+ *
+ * Security Requirements:
+ * - Only system-admin (admin@example.com) can access this
+ * - Password verification required
+ * - Confirmation text "FACTORY RESET" required
+ * - Complete data loss warning provided
  */
-
-const { Pool } = require('pg');
-
-// Database connection configuration
-const pool = new Pool({
-    connectionString: process.env.DATABASE_URL ||
-        `postgresql://${process.env.DB_USER || 'postgres'}:${process.env.DB_PASSWORD || 'changeme123'}@${process.env.DB_HOST || 'localhost'}:${process.env.DB_PORT || '5433'}/${process.env.DB_NAME || 'lodger_management'}`,
-    ssl: false
-});
-
-async function createTables() {
-    const client = await pool.connect();
-
+router.post('/', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
-        console.log('🔄 Creating database tables...');
+        const { password, confirm_text } = req.body;
 
-        await client.query('BEGIN');
+        // Validate input
+        if (!password) {
+            return res.status(400).json({ error: 'Password is required' });
+        }
+
+        if (confirm_text !== 'FACTORY RESET') {
+            return res.status(400).json({ error: 'Please type "FACTORY RESET" exactly to confirm' });
+        }
+
+        // Verify user is system administrator
+        if (req.user.user_type !== 'sys_admin') {
+            return res.status(403).json({
+                error: 'Factory reset is restricted to the System Administrator only'
+            });
+        }
+
+        // Verify admin password
+        const pool = require('../config/database').pool;
+        const userResult = await pool.query(
+            'SELECT password_hash FROM users WHERE id = $1',
+            [req.user.id]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const isValidPassword = await bcrypt.compare(password, userResult.rows[0].password_hash);
+        if (!isValidPassword) {
+            return res.status(401).json({ error: 'Invalid password' });
+        }
+
+        console.log('🚨 Starting complete factory reset...');
+
+        // Drop all tables (in reverse dependency order)
+        const tablesToDrop = [
+            'deductions',
+            'payment_transactions',
+            'payment_schedule',
+            'notices',
+            'notifications',
+            'tax_year_summary',
+            'landlord_payment_details',
+            'tenancies',
+            'users'
+        ];
+
+        for (const table of tablesToDrop) {
+            try {
+                await pool.query(`DROP TABLE IF EXISTS ${table} CASCADE`);
+                console.log(`✓ Dropped table: ${table}`);
+            } catch (dropError) {
+                console.log(`⚠️ Could not drop table ${table}:`, dropError.message);
+            }
+        }
+
+        // Recreate database schema
+        console.log('🔄 Recreating database schema...');
 
         // Enable UUID extension
-        await client.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
+        await pool.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp"');
 
         // Create users table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS users (
+        await pool.query(`
+            CREATE TABLE users (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 email VARCHAR(255) UNIQUE NOT NULL,
                 password_hash VARCHAR(255),
@@ -44,7 +107,6 @@ async function createTables() {
                 bank_sort_code VARCHAR(8),
                 payment_reference VARCHAR(50),
                 rooms JSONB,
-                landlord_id UUID REFERENCES users(id) ON DELETE SET NULL,
                 last_login TIMESTAMP,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -54,8 +116,8 @@ async function createTables() {
         console.log('✓ Created users table');
 
         // Create landlord_payment_details table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS landlord_payment_details (
+        await pool.query(`
+            CREATE TABLE landlord_payment_details (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 landlord_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 account_number VARCHAR(8) NOT NULL,
@@ -69,8 +131,8 @@ async function createTables() {
         console.log('✓ Created landlord_payment_details table');
 
         // Create tenancies table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS tenancies (
+        await pool.query(`
+            CREATE TABLE tenancies (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 landlord_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 lodger_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -111,8 +173,8 @@ async function createTables() {
         console.log('✓ Created tenancies table');
 
         // Create payment_schedule table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS payment_schedule (
+        await pool.query(`
+            CREATE TABLE payment_schedule (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 tenancy_id UUID REFERENCES tenancies(id) ON DELETE CASCADE,
                 payment_number INTEGER NOT NULL,
@@ -138,8 +200,8 @@ async function createTables() {
         console.log('✓ Created payment_schedule table');
 
         // Create payment_transactions table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS payment_transactions (
+        await pool.query(`
+            CREATE TABLE payment_transactions (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 payment_schedule_id UUID REFERENCES payment_schedule(id) ON DELETE CASCADE,
                 tenancy_id UUID REFERENCES tenancies(id) ON DELETE CASCADE,
@@ -155,8 +217,8 @@ async function createTables() {
         console.log('✓ Created payment_transactions table');
 
         // Create tax_year_summary table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS tax_year_summary (
+        await pool.query(`
+            CREATE TABLE tax_year_summary (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 landlord_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 tax_year_start DATE NOT NULL,
@@ -172,8 +234,8 @@ async function createTables() {
         console.log('✓ Created tax_year_summary table');
 
         // Create notices table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS notices (
+        await pool.query(`
+            CREATE TABLE notices (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 tenancy_id UUID REFERENCES tenancies(id) ON DELETE CASCADE,
                 notice_type VARCHAR(50) NOT NULL CHECK (notice_type IN ('termination', 'breach', 'extension_offer', 'early_termination')),
@@ -197,8 +259,8 @@ async function createTables() {
         console.log('✓ Created notices table');
 
         // Create notifications table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS notifications (
+        await pool.query(`
+            CREATE TABLE notifications (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 user_id UUID REFERENCES users(id) ON DELETE CASCADE,
                 tenancy_id UUID REFERENCES tenancies(id) ON DELETE CASCADE,
@@ -214,8 +276,8 @@ async function createTables() {
         console.log('✓ Created notifications table');
 
         // Create deductions table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS deductions (
+        await pool.query(`
+            CREATE TABLE deductions (
                 id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
                 tenancy_id UUID REFERENCES tenancies(id) ON DELETE CASCADE,
                 deduction_type VARCHAR(50) NOT NULL,
@@ -234,54 +296,40 @@ async function createTables() {
         `);
         console.log('✓ Created deductions table');
 
-        // Create reset_requests table
-        await client.query(`
-            CREATE TABLE IF NOT EXISTS reset_requests (
-                id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-                landlord_id UUID REFERENCES users(id) ON DELETE CASCADE,
-                request_type VARCHAR(50) NOT NULL CHECK (request_type IN ('forgot_password', 'account_locked', 'data_corruption', 'account_transfer', 'other')),
-                details TEXT,
-                status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'denied', 'completed')),
-                admin_response TEXT,
-                admin_id UUID REFERENCES users(id),
-                responded_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
-        console.log('✓ Created reset_requests table');
-
         // Create indexes
-        await client.query('CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id)');
-        await client.query('CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at DESC)');
+        await pool.query('CREATE INDEX idx_notifications_user_id ON notifications(user_id)');
+        await pool.query('CREATE INDEX idx_notifications_created_at ON notifications(created_at DESC)');
         console.log('✓ Created indexes');
 
-        await client.query('COMMIT');
-        console.log('✅ Database tables created successfully!');
+        // Create initial admin account
+        console.log('👤 Creating initial admin account...');
+        const adminResult = await pool.query(
+            `INSERT INTO users (email, user_type, full_name, is_active, created_at, updated_at)
+             VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+             RETURNING id, email, user_type, full_name`,
+            ['admin@example.com', 'sys_admin', 'System Administrator', true]
+        );
+
+        console.log('✓ Admin account created:', adminResult.rows[0].email);
+        console.log('⚠️  Admin password needs to be set via /api/setup/admin/password');
+
+        console.log('✅ Complete factory reset completed successfully');
+
+        res.json({
+            message: 'Complete factory reset completed successfully',
+            note: 'All tables have been dropped and recreated. Admin account created with email: admin@example.com. Please set admin password and restart the application to trigger setup flow.',
+            admin_email: 'admin@example.com',
+            next_steps: [
+                'Set admin password using /api/setup/admin/password',
+                'Restart the application',
+                'Complete initial setup wizard'
+            ]
+        });
 
     } catch (error) {
-        await client.query('ROLLBACK');
-        console.error('❌ Failed to create tables:', error);
-        throw error;
-    } finally {
-        client.release();
+        console.error('Factory reset error:', error);
+        res.status(500).json({ error: 'Failed to perform factory reset: ' + error.message });
     }
-}
+});
 
-// Run the initialization if this script is executed directly
-if (require.main === module) {
-    createTables()
-        .then(() => {
-            console.log('🎉 Database initialization completed');
-            process.exit(0);
-        })
-        .catch((error) => {
-            console.error('💥 Database initialization failed:', error);
-            process.exit(1);
-        })
-        .finally(() => {
-            pool.end();
-        });
-}
-
-module.exports = { createTables };
+module.exports = router;

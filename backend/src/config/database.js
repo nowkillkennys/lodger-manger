@@ -24,7 +24,7 @@ const connectWithRetry = async (retries = 10, delay = 5000) => {
           await client.query(
             `INSERT INTO users (email, user_type, full_name, is_active, created_at, updated_at)
              VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-            ['admin@example.com', 'admin', 'System Administrator', true]
+            ['admin@example.com', 'sys_admin', 'System Administrator', true]
           );
 
           console.log('✓ Admin account created: admin@example.com');

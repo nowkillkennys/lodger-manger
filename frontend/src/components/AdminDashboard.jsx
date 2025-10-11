@@ -9,6 +9,10 @@ import { showSuccess, showError } from '../utils/toast';
  * Provides system-wide administration features for admin users
  */
 const AdminDashboard = ({ user, onLogout }) => {
+  console.log('AdminDashboard.jsx - Component loaded for user:', user?.email);
+  console.log('AdminDashboard.jsx - User type:', user?.user_type);
+  console.log('AdminDashboard.jsx - User email:', user?.email);
+
   const [activeTab, setActiveTab] = useState('overview');
   const [systemStats, setSystemStats] = useState({
     totalLandlords: 0,
@@ -19,8 +23,6 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [landlords, setLandlords] = useState([]);
   const [resetRequests, setResetRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [factoryResetPassword, setFactoryResetPassword] = useState('');
-  const [confirmText, setConfirmText] = useState('');
   const [notifications, setNotifications] = useState([]);
   const [showNotificationDropdown, setShowNotificationDropdown] = useState(false);
   const [users, setUsers] = useState([]);
@@ -60,8 +62,6 @@ const AdminDashboard = ({ user, onLogout }) => {
     email: '', password: '', full_name: '', phone: '', user_type: 'lodger', landlord_id: '', landlord_email: ''
   });
 
-  // Check if current user is System Administrator
-  const isSystemAdministrator = user?.email === 'admin@example.com';
   const [availableLandlords, setAvailableLandlords] = useState([]);
   const [showClaimLodgerModal, setShowClaimLodgerModal] = useState(false);
   const [claimStep, setClaimStep] = useState('email'); // 'email' or 'confirm'
@@ -148,63 +148,6 @@ const AdminDashboard = ({ user, onLogout }) => {
     }
   };
 
-  const handleFactoryReset = async () => {
-    if (!factoryResetPassword) {
-      showError('Please enter your password to confirm factory reset');
-      return;
-    }
-
-    if (confirmText !== 'FACTORY RESET') {
-      showError('Please type "FACTORY RESET" exactly to confirm');
-      return;
-    }
-
-    const confirmed = confirm(
-      '🚨 COMPLETE DATABASE RESET 🚨\n\n' +
-      'This will DROP ALL TABLES and recreate them from scratch:\n' +
-      '• All tenancies, payments, lodgers, notices will be DELETED\n' +
-      '• Database schema will be completely rebuilt\n' +
-      '• Admin account will be recreated\n' +
-      '• You will need to set admin password and run setup again\n\n' +
-      'This action CANNOT be undone!\n\n' +
-      'Are you absolutely sure you want to proceed?'
-    );
-
-    if (!confirmed) {
-      setFactoryResetPassword('');
-      setConfirmText('');
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post(`${API_URL}/api/factory-reset`, {
-        password: factoryResetPassword,
-        confirm_text: confirmText
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      showSuccess(response.data.message + (response.data.note ? '\n\n' + response.data.note : ''));
-
-      // Clear fields
-      setFactoryResetPassword('');
-      setConfirmText('');
-
-      // Log out and redirect to login (which will trigger setup flow)
-      setTimeout(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/';
-      }, 2000);
-
-    } catch (error) {
-      console.error('Factory reset error:', error);
-      showError(error.response?.data?.error || 'Failed to perform factory reset');
-      setFactoryResetPassword('');
-      setConfirmText('');
-    }
-  };
 
   const handleResetRequestAction = async (requestId, action) => {
     try {
@@ -569,9 +512,9 @@ const AdminDashboard = ({ user, onLogout }) => {
   };
 
   const handleDeleteUser = (user) => {
-    // Prevent deletion of System Administrator
-    if (user.user_type === 'admin' && user.email === 'admin@example.com') {
-      showError('Cannot delete the System Administrator account');
+    // Sub-admins cannot delete other admin users
+    if (user.user_type === 'admin') {
+      showError('Sub-administrators cannot delete other admin accounts. Contact the System Administrator for assistance.');
       return;
     }
 
@@ -713,12 +656,12 @@ const AdminDashboard = ({ user, onLogout }) => {
       <nav className="bg-white border-b border-gray-200 sticky top-0 z-50 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 py-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-red-600 rounded-lg flex items-center justify-center">
+            <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center">
               <Shield className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-gray-900">Admin Panel</h1>
-              <p className="text-xs text-gray-500">System Administration</p>
+              <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
+              <p className="text-xs text-gray-500">Sub-Administrator Portal</p>
             </div>
           </div>
           <div className="flex items-center gap-4">
@@ -837,7 +780,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                 onClick={() => setActiveTab(tab)}
                 className={`px-1 py-4 border-b-2 transition font-medium capitalize whitespace-nowrap ${
                   activeTab === tab
-                    ? 'border-red-600 text-red-600'
+                    ? 'border-blue-600 text-blue-600'
                     : 'border-transparent text-gray-600 hover:text-gray-900'
                 }`}
               >
@@ -1168,18 +1111,18 @@ const AdminDashboard = ({ user, onLogout }) => {
                               <button
                                 onClick={() => handleDeleteUser(user)}
                                 className={`font-medium ${
-                                  user.user_type === 'admin' && user.email !== 'admin@example.com'
-                                    ? 'text-red-800 hover:text-red-900'
+                                  user.user_type === 'admin'
+                                    ? 'text-gray-400 cursor-not-allowed'
                                     : 'text-red-600 hover:text-red-700'
                                 }`}
                                 title={
-                                  user.user_type === 'admin' && user.email === 'admin@example.com'
-                                    ? 'Cannot delete System Administrator'
+                                  user.user_type === 'admin'
+                                    ? 'Sub-admins cannot delete other admin accounts'
                                     : 'Delete this user'
                                 }
-                                disabled={user.user_type === 'admin' && user.email === 'admin@example.com'}
+                                disabled={user.user_type === 'admin'}
                               >
-                                {user.user_type === 'admin' && user.email === 'admin@example.com' ? 'Protected' : 'Delete'}
+                                {user.user_type === 'admin' ? 'Cannot Delete' : 'Delete'}
                               </button>
                             </div>
                           </td>
@@ -2019,62 +1962,6 @@ const AdminDashboard = ({ user, onLogout }) => {
               </div>
             </div>
 
-            {/* Factory Reset Section */}
-            <div className="pt-6 border-t">
-              <h3 className="text-lg font-semibold mb-4 text-red-600">Danger Zone</h3>
-              <div className="border-2 border-red-200 rounded-lg p-4 bg-red-50">
-                <div className="flex items-start gap-3 mb-4">
-                  <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
-                  <div>
-                    <h4 className="font-semibold text-red-900 mb-2">Complete Factory Reset</h4>
-                    <p className="text-sm text-red-800 mb-3">
-                      This will completely reset the database by dropping all tables and recreating them from scratch.
-                      ALL data will be permanently deleted including tenancies, payments, lodgers, and notices.
-                      Only your admin account will remain. This action cannot be undone!
-                    </p>
-
-                    <div className="space-y-3">
-                      <div className="bg-white border border-red-300 rounded-lg p-3">
-                        <p className="text-sm font-semibold text-red-900 mb-2">Enter your password:</p>
-                        <input
-                          type="password"
-                          value={factoryResetPassword}
-                          onChange={(e) => setFactoryResetPassword(e.target.value)}
-                          className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                          placeholder="Enter admin password"
-                        />
-                      </div>
-
-                      <div className="bg-white border border-red-300 rounded-lg p-3">
-                        <p className="text-sm font-semibold text-red-900 mb-2">Type "FACTORY RESET" to confirm:</p>
-                        <input
-                          type="text"
-                          value={confirmText}
-                          onChange={(e) => setConfirmText(e.target.value)}
-                          className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                          placeholder="FACTORY RESET"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="mt-4 p-3 bg-red-100 border border-red-400 rounded-lg">
-                      <p className="text-sm font-bold text-red-900 mb-1">⚠️ FINAL WARNING</p>
-                      <p className="text-xs text-red-800">
-                        This will drop all database tables and recreate them. After reset, you will need to set the admin password again and complete the setup wizard.
-                      </p>
-                    </div>
-
-                    <button
-                      onClick={handleFactoryReset}
-                      disabled={!factoryResetPassword || confirmText !== 'FACTORY RESET'}
-                      className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
-                    >
-                      Complete Factory Reset - Drop & Recreate Database
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
           </div>
         )}
 
@@ -2246,7 +2133,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                   >
                     <option value="lodger">Lodger</option>
                     <option value="landlord">Landlord</option>
-                    {isSystemAdministrator && <option value="admin">Admin</option>}
+                    <option value="admin">Admin</option>
                   </select>
                 </div>
 
@@ -2720,7 +2607,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                 <p className="text-sm text-red-800">
                   <strong>⚠️ Warning:</strong> This will permanently delete the user account and all associated data.
                   {editingUser.user_type === 'lodger' && editingUser.landlord_id && ' The landlord-lodger association will be automatically removed.'}
-                  {editingUser.user_type === 'admin' && editingUser.email !== 'admin@example.com' && ' This admin user and all their permissions will be removed.'}
+                  {editingUser.user_type === 'admin' && ' This admin user and all their permissions will be removed.'}
                 </p>
               </div>
 

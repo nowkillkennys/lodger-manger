@@ -292,7 +292,6 @@ const LandlordDashboard = ({ user, onLogout }) => {
   });
   const [showPaymentSchedule, setShowPaymentSchedule] = useState(false);
   const [selectedTenancyForPayments, setSelectedTenancyForPayments] = useState(null);
-  const [factoryResetPassword, setFactoryResetPassword] = useState('');
   const [showConfirmPaymentModal, setShowConfirmPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [paymentConfirmForm, setPaymentConfirmForm] = useState({
@@ -989,63 +988,6 @@ const LandlordDashboard = ({ user, onLogout }) => {
     }
   };
 
-  const handleFactoryReset = async () => {
-    if (!factoryResetPassword) {
-      showError('Please enter your password to confirm factory reset');
-      return;
-    }
-
-    if (confirmText !== 'FACTORY RESET') {
-      showError('Please type "FACTORY RESET" exactly to confirm');
-      return;
-    }
-
-    const confirmed = confirm(
-      '🚨 COMPLETE DATABASE RESET 🚨\n\n' +
-      'This will DROP ALL TABLES and recreate them from scratch:\n' +
-      '• All tenancies, payments, lodgers, notices will be DELETED\n' +
-      '• Database schema will be completely rebuilt\n' +
-      '• Admin account will be recreated\n' +
-      '• You will need to set admin password and run setup again\n\n' +
-      'This action CANNOT be undone!\n\n' +
-      'Are you absolutely sure you want to proceed?'
-    );
-
-    if (!confirmed) {
-      setFactoryResetPassword('');
-      setConfirmText('');
-      return;
-    }
-
-    try {
-      const token = localStorage.getItem('token');
-      const response = await axios.post(`${API_URL}/api/factory-reset`, {
-        password: factoryResetPassword,
-        confirm_text: confirmText
-      }, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      showSuccess(response.data.message + (response.data.note ? '\n\n' + response.data.note : ''));
-
-      // Clear fields
-      setFactoryResetPassword('');
-      setConfirmText('');
-
-      // Log out and redirect to login (which will trigger setup flow)
-      setTimeout(() => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        window.location.href = '/';
-      }, 2000);
-
-    } catch (error) {
-      console.error('Factory reset error:', error);
-      showError(error.response?.data?.error || 'Failed to perform factory reset');
-      setFactoryResetPassword('');
-      setConfirmText('');
-    }
-  };
 
   const handleOpenConfirmPayment = (payment) => {
     setSelectedPayment(payment);
@@ -2857,64 +2799,6 @@ const LandlordDashboard = ({ user, onLogout }) => {
                 </div>
               </div>
 
-              {/* Factory Reset Section (Admin Only) */}
-              {user.user_type === 'admin' && (
-                <div className="pt-6 border-t">
-                  <h3 className="text-lg font-semibold mb-4 text-red-600">Danger Zone</h3>
-                  <div className="border-2 border-red-200 rounded-lg p-4 bg-red-50">
-                    <div className="flex items-start gap-3 mb-4">
-                      <AlertCircle className="w-6 h-6 text-red-600 flex-shrink-0 mt-0.5" />
-                      <div>
-                        <h4 className="font-semibold text-red-900 mb-2">Complete Factory Reset</h4>
-                        <p className="text-sm text-red-800 mb-3">
-                          This will completely reset the database by dropping all tables and recreating them from scratch.
-                          ALL data will be permanently deleted including tenancies, payments, lodgers, and notices.
-                          Only your admin account will remain. This action cannot be undone!
-                        </p>
-
-                        <div className="space-y-3">
-                          <div className="bg-white border border-red-300 rounded-lg p-3">
-                            <p className="text-sm font-semibold text-red-900 mb-2">Enter your password:</p>
-                            <input
-                              type="password"
-                              value={factoryResetPassword}
-                              onChange={(e) => setFactoryResetPassword(e.target.value)}
-                              className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                              placeholder="Enter admin password"
-                            />
-                          </div>
-
-                          <div className="bg-white border border-red-300 rounded-lg p-3">
-                            <p className="text-sm font-semibold text-red-900 mb-2">Type "FACTORY RESET" to confirm:</p>
-                            <input
-                              type="text"
-                              value={confirmText}
-                              onChange={(e) => setConfirmText(e.target.value)}
-                              className="w-full px-3 py-2 border border-red-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-red-500"
-                              placeholder="FACTORY RESET"
-                            />
-                          </div>
-                        </div>
-
-                        <div className="mt-4 p-3 bg-red-100 border border-red-400 rounded-lg">
-                          <p className="text-sm font-bold text-red-900 mb-1">⚠️ FINAL WARNING</p>
-                          <p className="text-xs text-red-800">
-                            This will drop all database tables and recreate them. After reset, you will need to set the admin password again and complete the setup wizard.
-                          </p>
-                        </div>
-
-                        <button
-                          onClick={handleFactoryReset}
-                          disabled={!factoryResetPassword || confirmText !== 'FACTORY RESET'}
-                          className="mt-3 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed"
-                        >
-                          Complete Factory Reset - Drop & Recreate Database
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         )}

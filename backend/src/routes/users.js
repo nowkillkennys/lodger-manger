@@ -37,8 +37,8 @@ router.post('/', authenticateToken, requireRole('landlord', 'admin'), async (req
             return res.status(403).json({ error: 'Landlords can only create lodger accounts' });
         }
 
-        if (req.user.user_type === 'admin' && user_type === 'admin' && req.user.email !== 'admin@example.com') {
-            return res.status(403).json({ error: 'Only the System Administrator can create other admin accounts' });
+        if (req.user.user_type === 'admin' && user_type === 'admin') {
+            return res.status(403).json({ error: 'Sub-administrators cannot create other admin accounts. Contact the System Administrator for assistance.' });
         }
 
         // Check lodger limit for landlords (max 2 active tenancies)
@@ -775,7 +775,7 @@ router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) 
         // Check if trying to delete an admin user
         if (user.user_type === 'admin') {
             // Only the System Administrator can delete other admin users
-            if (req.user.email !== 'admin@example.com') {
+            if (req.user.user_type !== 'sys_admin') {
                 return res.status(403).json({
                     error: 'Only the System Administrator can delete other admin users.'
                 });

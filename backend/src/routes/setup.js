@@ -27,7 +27,7 @@ router.get('/status', async (req, res) => {
         if (userCount === 1) {
             const adminResult = await pool.query(
                 'SELECT password_hash FROM users WHERE email = $1 AND user_type = $2',
-                ['admin@example.com', 'admin']
+                ['admin@example.com', 'sys_admin']
             );
             if (adminResult.rows.length > 0 && !adminResult.rows[0].password_hash) {
                 needsSetup = true;
@@ -65,7 +65,7 @@ router.post('/admin', async (req, res) => {
             `INSERT INTO users (email, user_type, full_name, is_active, created_at, updated_at)
              VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
              RETURNING id, email, user_type, full_name`,
-            ['admin@example.com', 'admin', 'System Administrator', true]
+            ['admin@example.com', 'sys_admin', 'System Administrator', true]
         );
 
         res.status(201).json({
@@ -96,7 +96,7 @@ router.post('/admin/password', async (req, res) => {
         // Check if admin exists and has no password
         const adminCheck = await pool.query(
             'SELECT id, password_hash FROM users WHERE email = $1 AND user_type = $2',
-            ['admin@example.com', 'admin']
+            ['admin@example.com', 'sys_admin']
         );
 
         if (adminCheck.rows.length === 0) {
