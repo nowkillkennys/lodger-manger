@@ -73,6 +73,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [unlinkForm, setUnlinkForm] = useState({
     lodger_email: ''
   });
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   useEffect(() => {
     fetchAdminData();
@@ -561,6 +562,27 @@ const AdminDashboard = ({ user, onLogout }) => {
       fetchAdminData();
     } catch (error) {
       showError(error.response?.data?.error || 'Failed to unlink lodger');
+    }
+  };
+
+  const handleDeleteUser = (user) => {
+    setEditingUser(user);
+    setShowDeleteModal(true);
+  };
+
+  const handleConfirmDeleteUser = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${API_URL}/api/users/${editingUser.id}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      showSuccess('User deleted successfully');
+      setShowDeleteModal(false);
+      setEditingUser(null);
+      fetchAdminData();
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to delete user');
     }
   };
 
@@ -1134,6 +1156,13 @@ const AdminDashboard = ({ user, onLogout }) => {
                                   Unlink
                                 </button>
                               )}
+                              <button
+                                onClick={() => handleDeleteUser(user)}
+                                className="text-red-800 hover:text-red-900 font-medium"
+                                title="Delete this user"
+                              >
+                                Delete
+                              </button>
                             </div>
                           </td>
                         </tr>
@@ -2624,6 +2653,75 @@ const AdminDashboard = ({ user, onLogout }) => {
                   </div>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Delete User Modal */}
+        {showDeleteModal && editingUser && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold mb-4 text-red-600">Delete User</h3>
+              <div className="mb-4">
+                <p className="text-sm text-gray-600 mb-2">
+                  Are you sure you want to delete this user? This action cannot be undone.
+                </p>
+                <div className="bg-gray-50 rounded-lg p-4 space-y-2">
+                  <div>
+                    <p className="text-sm text-gray-600">Name</p>
+                    <p className="font-semibold">{editingUser.full_name}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Email</p>
+                    <p className="font-medium">{editingUser.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-600">Role</p>
+                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                      editingUser.user_type === 'admin'
+                        ? 'bg-red-100 text-red-800'
+                        : editingUser.user_type === 'landlord'
+                        ? 'bg-blue-100 text-blue-800'
+                        : 'bg-green-100 text-green-800'
+                    }`}>
+                      {editingUser.user_type}
+                    </span>
+                  </div>
+                  {editingUser.user_type === 'lodger' && editingUser.landlord_id && (
+                    <div>
+                      <p className="text-sm text-gray-600">Linked to Landlord</p>
+                      <p className="font-medium text-red-600">
+                        {editingUser.landlord_name || `Landlord #${editingUser.landlord_id}`}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="bg-red-50 border border-red-200 rounded-lg p-3 mb-4">
+                <p className="text-sm text-red-800">
+                  <strong>⚠️ Warning:</strong> This will permanently delete the user account and all associated data.
+                  {editingUser.user_type === 'lodger' && editingUser.landlord_id && ' The landlord-lodger association will be automatically removed.'}
+                </p>
+              </div>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={handleConfirmDeleteUser}
+                  className="flex-1 bg-red-600 text-white py-2 px-4 rounded-lg hover:bg-red-700 transition font-semibold"
+                >
+                  Delete User
+                </button>
+                <button
+                  onClick={() => {
+                    setShowDeleteModal(false);
+                    setEditingUser(null);
+                  }}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition"
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
           </div>
         )}

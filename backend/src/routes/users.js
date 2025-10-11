@@ -745,4 +745,82 @@ router.get('/', authenticateToken, requireRole('admin'), async (req, res) => {
     }
 });
 
+/**
+ * Delete user (admin only)
+ * @route DELETE /api/users/:id
+ * @auth Admin only
+ * @param {string} id - User ID
+ * @returns {Object} Success message
+ */
+router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Get user details before deletion
+        const userResult = await pool.query(
+            'SELECT * FROM users WHERE id = $1',
+            [id]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        const user = userResult.rows[0];
+
+        // Prevent deletion of admin users (safety check)
+        if (user.user_type === 'admin') {
+            return res.status(400).json({
+                error: 'Cannot delete admin users. Please contact system administrator.'
+            });
+        }
+
+        // Check if user has active tenancies (shouldn't delete if there are active agreements)
+        if (user.user_type === 'lodger' && user.landlord_id) {
+            const activeTenancies = await pool.query(
+                `SELECT COUNT(*) as count FROM tenancies
+                 WHERE lodger_id = $1 AND landlord_id = $2 AND status IN ('active', 'draft')`,
+                [id, user.landlord_id]
+            );
+
+            if (parseInt(activeTenancies.rows[0].count) > 0) {
+                return res.status(400).json({
+                    error: 'Cannot delete lodger with active tenancy agreements. Please terminate tenancies first or unlink the lodger.'
+                });
+            }
+        }
+
+        if (user.user_type === 'landlord') {
+            const activeTenancies = await pool.query(
+                `SELECT COUNT(*) as count FROM tenancies
+                 WHERE landlord_id = $1 AND status IN ('active', 'draft')`,
+                [id]
+            );
+
+            if (parseInt(activeTenancies.rows[0].count) > 0) {
+                return res.status(400).json({
+                    error: 'Cannot delete landlord with active tenancy agreements. Please terminate all tenancies first.'
+                });
+            }
+        }
+
+        // Delete the user
+        await pool.query('DELETE FROM users WHERE id = $1', [id]);
+
+        res.json({
+            message: 'User deleted successfully',
+            deletedUser: {
+                id: user.id,
+                email: user.email,
+                full_name: user.full_name,
+                user_type: user.user_type
+            }
+        });
+
+    } catch (error) {
+        console.error('Delete user error:', error);
+        res.status(500).json({ error: 'Failed to delete user' });
+    }
+});
+
 module.exports = router;
