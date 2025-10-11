@@ -67,6 +67,7 @@ const AdminDashboard = ({ user, onLogout }) => {
     assign_to_landlord_id: '', // Keep for backward compatibility
     assign_to_landlord_email: '' // Admin can assign to specific landlord by email
   });
+  const [assignMethod, setAssignMethod] = useState('email'); // 'email' or 'id'
   const [lodgerPreview, setLodgerPreview] = useState(null);
   const [showUnlinkUsersModal, setShowUnlinkUsersModal] = useState(false); // false, 'email', or 'confirm'
   const [unlinkForm, setUnlinkForm] = useState({
@@ -429,8 +430,8 @@ const AdminDashboard = ({ user, onLogout }) => {
     try {
       const token = localStorage.getItem('token');
 
-      // If admin specified a landlord email assignment, use the claim by ID endpoint
-      if (claimLodgerForm.assign_to_landlord_email) {
+      // If admin specified a landlord assignment, use the claim by ID endpoint
+      if (assignMethod === 'email' && claimLodgerForm.assign_to_landlord_email) {
         // Validate landlord email format
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(claimLodgerForm.assign_to_landlord_email)) {
@@ -443,6 +444,19 @@ const AdminDashboard = ({ user, onLogout }) => {
         }, {
           headers: { Authorization: `Bearer ${token}` }
         });
+      } else if (assignMethod === 'id' && claimLodgerForm.assign_to_landlord_id) {
+        // Validate landlord ID format (UUID)
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (!uuidRegex.test(claimLodgerForm.assign_to_landlord_id)) {
+          showError('Please enter a valid landlord ID (UUID format)');
+          return;
+        }
+
+        await axios.post(`${API_URL}/api/users/${lodgerPreview.id}/claim`, {
+          landlord_id: claimLodgerForm.assign_to_landlord_id
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
       } else {
         // Use email-based claiming
         await axios.post(`${API_URL}/api/users/claim-lodger`, {
@@ -452,7 +466,7 @@ const AdminDashboard = ({ user, onLogout }) => {
         });
       }
 
-      showSuccess('Lodger successfully linked and assigned!');
+      showSuccess(`Lodger successfully linked and assigned to ${response.data.landlord?.full_name || 'landlord'}!`);
       setShowClaimLodgerModal(false);
       setClaimStep('email');
       setClaimLodgerForm({ lodger_email: '', assign_to_landlord_id: '', assign_to_landlord_email: '' });
@@ -466,6 +480,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   const handleClaimModalClose = () => {
     setShowClaimLodgerModal(false);
     setClaimStep('email');
+    setAssignMethod('email');
     setClaimLodgerForm({ lodger_email: '', assign_to_landlord_id: '', assign_to_landlord_email: '' });
     setLodgerPreview(null);
   };
@@ -1039,9 +1054,14 @@ const AdminDashboard = ({ user, onLogout }) => {
                               user.landlord_id ? (
                                 <div className="flex items-center gap-2">
                                   <UserCheck className="w-4 h-4 text-green-600" />
-                                  <span className="text-sm text-green-700 font-medium">
-                                    Linked to Landlord #{user.landlord_id}
-                                  </span>
+                                  <div className="text-sm">
+                                    <div className="text-green-700 font-medium">
+                                      {user.landlord_name || `Landlord #${user.landlord_id}`}
+                                    </div>
+                                    <div className="text-green-600 text-xs">
+                                      {user.landlord_email}
+                                    </div>
+                                  </div>
                                 </div>
                               ) : (
                                 <div className="flex items-center gap-2">
@@ -2414,16 +2434,56 @@ const AdminDashboard = ({ user, onLogout }) => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Landlord Email Address (Optional)
+                      Assign to Landlord (Optional)
                     </label>
-                    <input
-                      type="email"
-                      value={claimLodgerForm.assign_to_landlord_email || ''}
-                      onChange={(e) => setClaimLodgerForm({...claimLodgerForm, assign_to_landlord_email: e.target.value, assign_to_landlord_id: ''})}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                      placeholder="landlord@example.com"
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Optional: Enter landlord email to assign this lodger immediately</p>
+
+                    {/* Method Selection */}
+                    <div className="flex gap-4 mb-3">
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="email"
+                          checked={assignMethod === 'email'}
+                          onChange={(e) => setAssignMethod(e.target.value)}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">By Email</span>
+                      </label>
+                      <label className="flex items-center">
+                        <input
+                          type="radio"
+                          value="id"
+                          checked={assignMethod === 'id'}
+                          onChange={(e) => setAssignMethod(e.target.value)}
+                          className="mr-2"
+                        />
+                        <span className="text-sm">By ID</span>
+                      </label>
+                    </div>
+
+                    {assignMethod === 'email' ? (
+                      <div>
+                        <input
+                          type="email"
+                          value={claimLodgerForm.assign_to_landlord_email || ''}
+                          onChange={(e) => setClaimLodgerForm({...claimLodgerForm, assign_to_landlord_email: e.target.value, assign_to_landlord_id: ''})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          placeholder="landlord@example.com"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Enter landlord email address</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <input
+                          type="text"
+                          value={claimLodgerForm.assign_to_landlord_id || ''}
+                          onChange={(e) => setClaimLodgerForm({...claimLodgerForm, assign_to_landlord_id: e.target.value, assign_to_landlord_email: ''})}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                          placeholder="12345678-1234-1234-1234-123456789012"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Enter landlord ID (UUID format)</p>
+                      </div>
+                    )}
                   </div>
 
                   <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
@@ -2491,19 +2551,38 @@ const AdminDashboard = ({ user, onLogout }) => {
                         </span>
                       </div>
                       <div>
+                        <p className="text-sm text-gray-600">Current Landlord</p>
+                        {lodgerPreview.landlord_id ? (
+                          <div className="flex items-center gap-2 mt-1">
+                            <UserCheck className="w-4 h-4 text-green-600" />
+                            <div>
+                              <p className="font-medium text-green-700">
+                                {lodgerPreview.landlord_name || `Landlord #${lodgerPreview.landlord_id}`}
+                              </p>
+                              <p className="text-xs text-green-600">{lodgerPreview.landlord_email}</p>
+                            </div>
+                          </div>
+                        ) : (
+                          <span className="text-gray-500">Unassigned</span>
+                        )}
+                      </div>
+                      <div>
                         <p className="text-sm text-gray-600">Created</p>
                         <p className="font-medium">{new Date(lodgerPreview.created_at).toLocaleDateString('en-GB')}</p>
                       </div>
                     </div>
                   )}
 
-                  {claimLodgerForm.assign_to_landlord_email && (
+                  {(claimLodgerForm.assign_to_landlord_email || claimLodgerForm.assign_to_landlord_id) && (
                     <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
                       <p className="text-sm font-semibold text-blue-900 mb-2">Assignment Details:</p>
                       <p className="text-sm text-blue-800">
-                        This lodger will be immediately assigned to landlord:{' '}
+                        This lodger will be immediately assigned to:{' '}
                         <strong>
-                          {claimLodgerForm.assign_to_landlord_email}
+                          {assignMethod === 'email'
+                            ? claimLodgerForm.assign_to_landlord_email
+                            : `Landlord ID: ${claimLodgerForm.assign_to_landlord_id}`
+                          }
                         </strong>
                       </p>
                     </div>
@@ -2534,8 +2613,9 @@ const AdminDashboard = ({ user, onLogout }) => {
                     <button
                       onClick={() => {
                         setClaimStep('email');
+                        setAssignMethod('email');
                         setLodgerPreview(null);
-                        setClaimLodgerForm({ ...claimLodgerForm, assign_to_landlord_email: '' });
+                        setClaimLodgerForm({ lodger_email: '', assign_to_landlord_id: '', assign_to_landlord_email: '' });
                       }}
                       className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
                     >
@@ -2654,7 +2734,15 @@ const AdminDashboard = ({ user, onLogout }) => {
                       )}
                       <div>
                         <p className="text-sm text-gray-600">Currently Assigned To</p>
-                        <p className="font-medium text-red-600">Landlord ID: {unlinkForm.lodgerToUnlink.landlord_id}</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <UserX className="w-4 h-4 text-red-600" />
+                          <div>
+                            <p className="font-medium text-red-600">
+                              {unlinkForm.lodgerToUnlink.landlord_name || `Landlord #${unlinkForm.lodgerToUnlink.landlord_id}`}
+                            </p>
+                            <p className="text-xs text-red-500">{unlinkForm.lodgerToUnlink.landlord_email}</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}

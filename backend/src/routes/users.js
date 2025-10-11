@@ -74,7 +74,8 @@ router.post('/', authenticateToken, requireRole('landlord', 'admin'), async (req
         const result = await pool.query(
             `INSERT INTO users (email, password_hash, user_type, full_name, phone, house_number, street_name, city, county, postcode, landlord_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-             RETURNING id, email, user_type, full_name, phone, house_number, street_name, city, county, postcode, landlord_id`,
+             RETURNING u.id, u.email, u.user_type, u.full_name, u.phone, u.house_number, u.street_name, u.city, u.county, u.postcode, u.landlord_id,
+                      l.email as landlord_email, l.full_name as landlord_name`,
             [email, password_hash, user_type, full_name, phone || null, null, null, null, null, null, landlord_id]
         );
 
@@ -351,7 +352,9 @@ router.put('/:id', authenticateToken, requireRole('landlord', 'admin'), async (r
         values.push(id);
 
         const result = await pool.query(
-            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone, is_active, landlord_id`,
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount}
+             RETURNING u.id, u.email, u.user_type, u.full_name, u.phone, u.is_active, u.landlord_id,
+                      l.email as landlord_email, l.full_name as landlord_name`,
             values
         );
 
@@ -400,14 +403,29 @@ router.post('/:id/claim', authenticateToken, requireRole('landlord', 'admin'), a
     let targetLandlordId = req.user.id; // Default to current user
 
     // If admin is assigning to a different landlord, validate that landlord exists and has capacity
-    if (req.user.user_type === 'admin' && req.body.landlord_email) {
-        const landlordResult = await pool.query(
-            'SELECT id FROM users WHERE email = $1 AND user_type = $2 AND is_active = true',
-            [req.body.landlord_email, 'landlord']
-        );
+    if (req.user.user_type === 'admin' && (req.body.landlord_email || req.body.landlord_id)) {
+        let landlordResult;
 
-        if (landlordResult.rows.length === 0) {
-            return res.status(404).json({ error: 'Landlord not found with this email' });
+        if (req.body.landlord_email) {
+            // Find landlord by email
+            landlordResult = await pool.query(
+                'SELECT id, full_name, email FROM users WHERE email = $1 AND user_type = $2 AND is_active = true',
+                [req.body.landlord_email, 'landlord']
+            );
+
+            if (landlordResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Landlord not found with this email' });
+            }
+        } else if (req.body.landlord_id) {
+            // Find landlord by ID
+            landlordResult = await pool.query(
+                'SELECT id, full_name, email FROM users WHERE id = $1 AND user_type = $2 AND is_active = true',
+                [req.body.landlord_id, 'landlord']
+            );
+
+            if (landlordResult.rows.length === 0) {
+                return res.status(404).json({ error: 'Landlord not found with this ID' });
+            }
         }
 
         targetLandlordId = landlordResult.rows[0].id;
@@ -449,13 +467,18 @@ router.post('/:id/claim', authenticateToken, requireRole('landlord', 'admin'), a
         [targetLandlordId, lodger.id]
     );
 
-    const targetLandlordEmail = req.body.landlord_email || req.user.email;
+    const targetLandlord = landlordResult ? landlordResult.rows[0] : { email: req.user.email, full_name: req.user.full_name };
     res.json({
-        message: `Lodger successfully linked and assigned to ${targetLandlordEmail}`,
+        message: `Lodger successfully linked and assigned to ${targetLandlord.full_name} (${targetLandlord.email})`,
         lodger: {
             id: lodger.id,
             email: lodger.email,
             full_name: lodger.full_name
+        },
+        landlord: {
+            id: targetLandlordId,
+            email: targetLandlord.email,
+            full_name: targetLandlord.full_name
         }
     });
 
@@ -642,12 +665,14 @@ router.get('/available-lodgers', authenticateToken, requireRole('landlord', 'adm
   try {
     // Get lodgers who don't have a landlord_id assigned
     const result = await pool.query(
-        `SELECT id, email, user_type, full_name, phone, is_active, created_at, landlord_id
-         FROM users
-         WHERE user_type = 'lodger'
-         AND landlord_id IS NULL
-         AND is_active = true
-         ORDER BY created_at DESC`
+        `SELECT u.id, u.email, u.user_type, u.full_name, u.phone, u.is_active, u.created_at, u.landlord_id,
+                l.email as landlord_email, l.full_name as landlord_name
+         FROM users u
+         LEFT JOIN users l ON u.landlord_id = l.id
+         WHERE u.user_type = 'lodger'
+         AND u.landlord_id IS NULL
+         AND u.is_active = true
+         ORDER BY u.created_at DESC`
     );
 
     res.json(result.rows);
@@ -670,18 +695,22 @@ router.get('/lodgers', authenticateToken, requireRole('landlord', 'admin'), asyn
         if (req.user.user_type === 'admin') {
             // Admins see all lodgers
             result = await pool.query(
-                `SELECT id, email, user_type, full_name, phone, is_active, created_at, landlord_id
-                 FROM users
-                 WHERE user_type = 'lodger'
-                 ORDER BY created_at DESC`
+                `SELECT u.id, u.email, u.user_type, u.full_name, u.phone, u.is_active, u.created_at, u.landlord_id,
+                        l.email as landlord_email, l.full_name as landlord_name
+                 FROM users u
+                 LEFT JOIN users l ON u.landlord_id = l.id
+                 WHERE u.user_type = 'lodger'
+                 ORDER BY u.created_at DESC`
             );
         } else {
             // Landlords see only their lodgers (by landlord_id)
             result = await pool.query(
-                `SELECT id, email, user_type, full_name, phone, is_active, created_at, landlord_id
-                 FROM users
-                 WHERE landlord_id = $1 AND user_type = 'lodger'
-                 ORDER BY created_at DESC`,
+                `SELECT u.id, u.email, u.user_type, u.full_name, u.phone, u.is_active, u.created_at, u.landlord_id,
+                        l.email as landlord_email, l.full_name as landlord_name
+                 FROM users u
+                 LEFT JOIN users l ON u.landlord_id = l.id
+                 WHERE u.landlord_id = $1 AND u.user_type = 'lodger'
+                 ORDER BY u.created_at DESC`,
                 [req.user.id]
             );
         }
@@ -702,7 +731,11 @@ router.get('/lodgers', authenticateToken, requireRole('landlord', 'admin'), asyn
 router.get('/', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
         const result = await pool.query(
-            'SELECT id, email, user_type, full_name, phone, is_active, created_at, landlord_id FROM users ORDER BY created_at DESC'
+            `SELECT u.id, u.email, u.user_type, u.full_name, u.phone, u.is_active, u.created_at, u.landlord_id,
+                    l.email as landlord_email, l.full_name as landlord_name
+             FROM users u
+             LEFT JOIN users l ON u.landlord_id = l.id
+             ORDER BY u.created_at DESC`
         );
 
         res.json(result.rows);
