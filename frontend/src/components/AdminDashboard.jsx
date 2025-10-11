@@ -59,6 +59,9 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [newUserForm, setNewUserForm] = useState({
     email: '', password: '', full_name: '', phone: '', user_type: 'lodger', landlord_id: '', landlord_email: ''
   });
+
+  // Check if current user is System Administrator
+  const isSystemAdministrator = user?.email === 'admin@example.com';
   const [availableLandlords, setAvailableLandlords] = useState([]);
   const [showClaimLodgerModal, setShowClaimLodgerModal] = useState(false);
   const [claimStep, setClaimStep] = useState('email'); // 'email' or 'confirm'
@@ -566,6 +569,12 @@ const AdminDashboard = ({ user, onLogout }) => {
   };
 
   const handleDeleteUser = (user) => {
+    // Prevent deletion of System Administrator
+    if (user.user_type === 'admin' && user.email === 'admin@example.com') {
+      showError('Cannot delete the System Administrator account');
+      return;
+    }
+
     setEditingUser(user);
     setShowDeleteModal(true);
   };
@@ -1158,10 +1167,19 @@ const AdminDashboard = ({ user, onLogout }) => {
                               )}
                               <button
                                 onClick={() => handleDeleteUser(user)}
-                                className="text-red-800 hover:text-red-900 font-medium"
-                                title="Delete this user"
+                                className={`font-medium ${
+                                  user.user_type === 'admin' && user.email !== 'admin@example.com'
+                                    ? 'text-red-800 hover:text-red-900'
+                                    : 'text-red-600 hover:text-red-700'
+                                }`}
+                                title={
+                                  user.user_type === 'admin' && user.email === 'admin@example.com'
+                                    ? 'Cannot delete System Administrator'
+                                    : 'Delete this user'
+                                }
+                                disabled={user.user_type === 'admin' && user.email === 'admin@example.com'}
                               >
-                                Delete
+                                {user.user_type === 'admin' && user.email === 'admin@example.com' ? 'Protected' : 'Delete'}
                               </button>
                             </div>
                           </td>
@@ -2228,7 +2246,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                   >
                     <option value="lodger">Lodger</option>
                     <option value="landlord">Landlord</option>
-                    <option value="admin">Admin</option>
+                    {isSystemAdministrator && <option value="admin">Admin</option>}
                   </select>
                 </div>
 
@@ -2702,6 +2720,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                 <p className="text-sm text-red-800">
                   <strong>⚠️ Warning:</strong> This will permanently delete the user account and all associated data.
                   {editingUser.user_type === 'lodger' && editingUser.landlord_id && ' The landlord-lodger association will be automatically removed.'}
+                  {editingUser.user_type === 'admin' && editingUser.email !== 'admin@example.com' && ' This admin user and all their permissions will be removed.'}
                 </p>
               </div>
 

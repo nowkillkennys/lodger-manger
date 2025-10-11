@@ -32,9 +32,13 @@ router.post('/', authenticateToken, requireRole('landlord', 'admin'), async (req
             return res.status(400).json({ error: 'Email, password, user type, and full name are required' });
         }
 
-        // Landlords can only create lodgers, admins can create anyone
+        // Check user creation permissions based on hierarchy
         if (req.user.user_type === 'landlord' && user_type !== 'lodger') {
             return res.status(403).json({ error: 'Landlords can only create lodger accounts' });
+        }
+
+        if (req.user.user_type === 'admin' && user_type === 'admin' && req.user.email !== 'admin@example.com') {
+            return res.status(403).json({ error: 'Only the System Administrator can create other admin accounts' });
         }
 
         // Check lodger limit for landlords (max 2 active tenancies)
@@ -768,11 +772,21 @@ router.delete('/:id', authenticateToken, requireRole('admin'), async (req, res) 
 
         const user = userResult.rows[0];
 
-        // Prevent deletion of admin users (safety check)
+        // Check if trying to delete an admin user
         if (user.user_type === 'admin') {
-            return res.status(400).json({
-                error: 'Cannot delete admin users. Please contact system administrator.'
-            });
+            // Only the System Administrator can delete other admin users
+            if (req.user.email !== 'admin@example.com') {
+                return res.status(403).json({
+                    error: 'Only the System Administrator can delete other admin users.'
+                });
+            }
+
+            // Prevent System Administrator from deleting themselves
+            if (user.id === req.user.id) {
+                return res.status(400).json({
+                    error: 'System Administrator cannot delete their own account.'
+                });
+            }
         }
 
         // Check if user has active tenancies (shouldn't delete if there are active agreements)
