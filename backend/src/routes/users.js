@@ -74,7 +74,7 @@ router.post('/', authenticateToken, requireRole('landlord', 'admin'), async (req
         const result = await pool.query(
             `INSERT INTO users (email, password_hash, user_type, full_name, phone, house_number, street_name, city, county, postcode, landlord_id)
              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-             RETURNING id, email, user_type, full_name, phone, house_number, street_name, city, county, postcode`,
+             RETURNING id, email, user_type, full_name, phone, house_number, street_name, city, county, postcode, landlord_id`,
             [email, password_hash, user_type, full_name, phone || null, null, null, null, null, null, landlord_id]
         );
 
@@ -351,7 +351,7 @@ router.put('/:id', authenticateToken, requireRole('landlord', 'admin'), async (r
         values.push(id);
 
         const result = await pool.query(
-            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone, is_active`,
+            `UPDATE users SET ${updates.join(', ')} WHERE id = $${paramCount} RETURNING id, email, user_type, full_name, phone, is_active, landlord_id`,
             values
         );
 
@@ -367,6 +367,297 @@ router.put('/:id', authenticateToken, requireRole('landlord', 'admin'), async (r
 });
 
 /**
+ * Claim existing lodger by ID (landlord/admin only)
+ * @route POST /api/users/:id/claim
+ * @auth Landlord/Admin only
+ * @param {string} id - Lodger user ID
+ * @returns {Object} Success message or error
+ */
+router.post('/:id/claim', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find the lodger by ID
+    const lodgerResult = await pool.query(
+      'SELECT * FROM users WHERE id = $1 AND user_type = $2',
+      [id, 'lodger']
+    );
+
+    if (lodgerResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Lodger not found with this ID' });
+    }
+
+    const lodger = lodgerResult.rows[0];
+
+    // Check if lodger is already assigned to a landlord
+    if (lodger.landlord_id) {
+        return res.status(400).json({
+            error: 'This lodger is already assigned to a landlord. Please contact an admin to reassign.'
+        });
+    }
+
+    // Determine which landlord to assign to
+    let targetLandlordId = req.user.id; // Default to current user
+
+    // If admin is assigning to a different landlord, validate that landlord exists and has capacity
+    if (req.user.user_type === 'admin' && req.body.landlord_email) {
+        const landlordResult = await pool.query(
+            'SELECT id FROM users WHERE email = $1 AND user_type = $2 AND is_active = true',
+            [req.body.landlord_email, 'landlord']
+        );
+
+        if (landlordResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Landlord not found with this email' });
+        }
+
+        targetLandlordId = landlordResult.rows[0].id;
+
+        // Check target landlord's current lodger count (max 2 active tenancies)
+        const activeTenanciesCount = await pool.query(
+            `SELECT COUNT(DISTINCT lodger_id) as count
+             FROM tenancies
+             WHERE landlord_id = $1
+             AND status IN ('active', 'draft')`,
+            [targetLandlordId]
+        );
+
+        if (parseInt(activeTenanciesCount.rows[0].count) >= 2) {
+            return res.status(400).json({
+                error: 'Target landlord has reached the maximum lodger limit (2 active tenancies).'
+            });
+        }
+    } else if (req.user.user_type === 'landlord') {
+        // For regular landlords, check their own limit
+        const activeTenanciesCount = await pool.query(
+            `SELECT COUNT(DISTINCT lodger_id) as count
+             FROM tenancies
+             WHERE landlord_id = $1
+             AND status IN ('active', 'draft')`,
+            [req.user.id]
+        );
+
+        if (parseInt(activeTenanciesCount.rows[0].count) >= 2) {
+            return res.status(400).json({
+                error: 'Maximum lodger limit reached. You already have 2 active tenancies. Each landlord can only have 2 lodgers at a time.'
+            });
+        }
+    }
+
+    // Assign lodger to the determined landlord
+    await pool.query(
+        'UPDATE users SET landlord_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [targetLandlordId, lodger.id]
+    );
+
+    const targetLandlordEmail = req.body.landlord_email || req.user.email;
+    res.json({
+        message: `Lodger successfully linked and assigned to ${targetLandlordEmail}`,
+        lodger: {
+            id: lodger.id,
+            email: lodger.email,
+            full_name: lodger.full_name
+        }
+    });
+
+  } catch (error) {
+    console.error('Claim lodger by ID error:', error);
+    res.status(500).json({ error: 'Failed to claim lodger' });
+  }
+});
+
+/**
+ * Claim existing lodger by email (landlord/admin only)
+ * @route POST /api/users/claim-lodger
+ * @auth Landlord/Admin only
+ * @body {string} lodger_email - Email of lodger to claim
+ * @returns {Object} Success message or error
+ */
+router.post('/claim-lodger', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+    try {
+        const { lodger_email } = req.body;
+
+        if (!lodger_email) {
+            return res.status(400).json({ error: 'Lodger email is required' });
+        }
+
+        // Find the lodger by email
+        const lodgerResult = await pool.query(
+            'SELECT * FROM users WHERE email = $1 AND user_type = $2',
+            [lodger_email, 'lodger']
+        );
+
+        if (lodgerResult.rows.length === 0) {
+            return res.status(404).json({ error: 'Lodger not found with this email' });
+        }
+
+        const lodger = lodgerResult.rows[0];
+
+        // Check if lodger is already assigned to a landlord
+        if (lodger.landlord_id) {
+            return res.status(400).json({
+                error: 'This lodger is already assigned to a landlord. Please contact an admin to reassign.'
+            });
+        }
+
+        // Check landlord's current lodger count (max 2 active tenancies)
+        const activeTenanciesCount = await pool.query(
+            `SELECT COUNT(DISTINCT lodger_id) as count
+             FROM tenancies
+             WHERE landlord_id = $1
+             AND status IN ('active', 'draft')`,
+            [req.user.id]
+        );
+
+        if (parseInt(activeTenanciesCount.rows[0].count) >= 2) {
+            return res.status(400).json({
+                error: 'Maximum lodger limit reached. You already have 2 active tenancies. Each landlord can only have 2 lodgers at a time.'
+            });
+        }
+
+        // Assign lodger to landlord
+        await pool.query(
+            'UPDATE users SET landlord_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+            [req.user.id, lodger.id]
+        );
+
+        res.json({
+            message: 'Lodger successfully claimed and assigned to you',
+            lodger: {
+                id: lodger.id,
+                email: lodger.email,
+                full_name: lodger.full_name
+            }
+        });
+
+    } catch (error) {
+        console.error('Claim lodger error:', error);
+        res.status(500).json({ error: 'Failed to claim lodger' });
+    }
+});
+
+/**
+ * Remove landlord-lodger association (landlord/admin only)
+ * @route DELETE /api/users/:id/unlink
+ * @auth Landlord/Admin only
+ * @param {string} id - Lodger user ID
+ * @returns {Object} Success message
+ */
+router.delete('/:id/unlink', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Check permissions - landlord can only unlink their own lodgers, admin can unlink any
+        if (req.user.user_type === 'landlord') {
+            // Verify the lodger belongs to this landlord
+            const lodgerCheck = await pool.query(
+                'SELECT * FROM users WHERE id = $1 AND landlord_id = $2 AND user_type = $3',
+                [id, req.user.id, 'lodger']
+            );
+
+            if (lodgerCheck.rows.length === 0) {
+                return res.status(404).json({ error: 'Lodger not found or not assigned to you' });
+            }
+        } else if (req.user.user_type === 'admin') {
+            // Admin can unlink any lodger
+            const lodgerCheck = await pool.query(
+                'SELECT * FROM users WHERE id = $1 AND user_type = $2',
+                [id, 'lodger']
+            );
+
+            if (lodgerCheck.rows.length === 0) {
+                return res.status(404).json({ error: 'Lodger not found' });
+            }
+        } else {
+            return res.status(403).json({ error: 'Insufficient permissions' });
+        }
+
+        // Check if there are active tenancies (shouldn't unlink if there are active agreements)
+        const activeTenancies = await pool.query(
+            `SELECT COUNT(*) as count FROM tenancies
+             WHERE lodger_id = $1 AND landlord_id = $2 AND status IN ('active', 'draft')`,
+            [id, req.user.user_type === 'landlord' ? req.user.id : undefined]
+        );
+
+        if (parseInt(activeTenancies.rows[0].count) > 0) {
+            return res.status(400).json({
+                error: 'Cannot unlink lodger with active tenancy agreements. Please terminate tenancies first.'
+            });
+        }
+
+        // Remove the association
+        await pool.query(
+            'UPDATE users SET landlord_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+            [id]
+        );
+
+        res.json({
+            message: 'Lodger successfully unlinked from landlord'
+        });
+
+    } catch (error) {
+        console.error('Unlink lodger error:', error);
+        res.status(500).json({ error: 'Failed to unlink lodger' });
+    }
+});
+
+/**
+ * Get available landlords for lodger assignment
+ * @route GET /api/users/landlords
+ * @auth Admin only
+ * @returns {Array} List of landlords who can accept more lodgers
+ */
+router.get('/landlords', authenticateToken, requireRole('admin'), async (req, res) => {
+    try {
+        // Get landlords who have less than 2 active tenancies
+        const result = await pool.query(
+            `SELECT u.id, u.email, u.full_name, u.phone,
+                    COALESCE(active_count.count, 0) as current_lodgers
+             FROM users u
+             LEFT JOIN (
+                 SELECT landlord_id, COUNT(DISTINCT lodger_id) as count
+                 FROM tenancies
+                 WHERE status IN ('active', 'draft')
+                 GROUP BY landlord_id
+             ) active_count ON u.id = active_count.landlord_id
+             WHERE u.user_type = 'landlord'
+             AND u.is_active = true
+             AND (active_count.count IS NULL OR active_count.count < 2)
+             ORDER BY u.full_name`,
+        );
+
+        res.json(result.rows);
+    } catch (error) {
+        console.error('Get available landlords error:', error);
+        res.status(500).json({ error: 'Failed to get available landlords' });
+    }
+});
+
+/**
+ * Get available lodgers (unassigned)
+ * @route GET /api/users/available-lodgers
+ * @auth Landlord/Admin only
+ * @returns {Array} List of lodgers without landlord_id
+ */
+router.get('/available-lodgers', authenticateToken, requireRole('landlord', 'admin'), async (req, res) => {
+  try {
+    // Get lodgers who don't have a landlord_id assigned
+    const result = await pool.query(
+        `SELECT id, email, user_type, full_name, phone, is_active, created_at, landlord_id
+         FROM users
+         WHERE user_type = 'lodger'
+         AND landlord_id IS NULL
+         AND is_active = true
+         ORDER BY created_at DESC`
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Get available lodgers error:', error);
+    res.status(500).json({ error: 'Failed to get available lodgers' });
+  }
+});
+
+/**
  * Get landlord's lodgers
  * @route GET /api/users/lodgers
  * @auth Landlord/Admin only
@@ -379,7 +670,7 @@ router.get('/lodgers', authenticateToken, requireRole('landlord', 'admin'), asyn
         if (req.user.user_type === 'admin') {
             // Admins see all lodgers
             result = await pool.query(
-                `SELECT id, email, user_type, full_name, phone, is_active, created_at
+                `SELECT id, email, user_type, full_name, phone, is_active, created_at, landlord_id
                  FROM users
                  WHERE user_type = 'lodger'
                  ORDER BY created_at DESC`
@@ -387,7 +678,7 @@ router.get('/lodgers', authenticateToken, requireRole('landlord', 'admin'), asyn
         } else {
             // Landlords see only their lodgers (by landlord_id)
             result = await pool.query(
-                `SELECT id, email, user_type, full_name, phone, is_active, created_at
+                `SELECT id, email, user_type, full_name, phone, is_active, created_at, landlord_id
                  FROM users
                  WHERE landlord_id = $1 AND user_type = 'lodger'
                  ORDER BY created_at DESC`,
@@ -411,7 +702,7 @@ router.get('/lodgers', authenticateToken, requireRole('landlord', 'admin'), asyn
 router.get('/', authenticateToken, requireRole('admin'), async (req, res) => {
     try {
         const result = await pool.query(
-            'SELECT id, email, user_type, full_name, phone, is_active, created_at FROM users ORDER BY created_at DESC'
+            'SELECT id, email, user_type, full_name, phone, is_active, created_at, landlord_id FROM users ORDER BY created_at DESC'
         );
 
         res.json(result.rows);

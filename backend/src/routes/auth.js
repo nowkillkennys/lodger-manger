@@ -110,7 +110,7 @@ router.post('/register', async (req, res) => {
         }
 
         // Validate user type
-        if (!['landlord', 'lodger'].includes(user_type)) {
+        if (!['landlord', 'lodger', 'admin'].includes(user_type)) {
             return res.status(400).json({ error: 'Invalid user type' });
         }
 
@@ -123,6 +123,46 @@ router.post('/register', async (req, res) => {
         if (existingUser.rows.length > 0) {
             console.log(`[${new Date().toISOString()}] REGISTRATION_FAILED: Email ${email} already exists`);
             return res.status(400).json({ error: 'Email already registered' });
+        }
+
+        // If creating a lodger, check landlord's lodger limit (max 2 active tenancies)
+        let landlord_id = null;
+        if (user_type === 'lodger') {
+            // For lodger creation, we need a landlord_id (admin must specify which landlord)
+            if (!req.body.landlord_id) {
+                return res.status(400).json({ error: 'Landlord ID is required when creating a lodger account' });
+            }
+
+            landlord_id = req.body.landlord_id;
+
+            // Check if the specified landlord exists and is actually a landlord
+            const landlordCheck = await pool.query(
+                'SELECT user_type FROM users WHERE id = $1',
+                [landlord_id]
+            );
+
+            if (landlordCheck.rows.length === 0) {
+                return res.status(404).json({ error: 'Specified landlord not found' });
+            }
+
+            if (landlordCheck.rows[0].user_type !== 'landlord') {
+                return res.status(400).json({ error: 'Specified user is not a landlord' });
+            }
+
+            // Check landlord's current lodger count (max 2 active tenancies)
+            const activeTenanciesCount = await pool.query(
+                `SELECT COUNT(DISTINCT lodger_id) as count
+                 FROM tenancies
+                 WHERE landlord_id = $1
+                 AND status IN ('active', 'draft')`,
+                [landlord_id]
+            );
+
+            if (parseInt(activeTenanciesCount.rows[0].count) >= 2) {
+                return res.status(400).json({
+                    error: 'Maximum lodger limit reached. This landlord already has 2 active tenancies. Each landlord can only have 2 lodgers at a time.'
+                });
+            }
         }
 
         // Hash password
@@ -155,11 +195,11 @@ router.post('/register', async (req, res) => {
 
         // Create user
         const result = await pool.query(
-            `INSERT INTO users (email, password_hash, user_type, full_name, phone, house_number, street_name, city, county, postcode)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            `INSERT INTO users (email, password_hash, user_type, full_name, phone, house_number, street_name, city, county, postcode, landlord_id)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
              RETURNING id, email, user_type, full_name, phone, house_number, street_name, city, county, postcode`,
             [email, passwordHash, user_type, full_name, phone || null,
-             addressFields.house_number, addressFields.street_name, addressFields.city, addressFields.county, addressFields.postcode]
+             addressFields.house_number, addressFields.street_name, addressFields.city, addressFields.county, addressFields.postcode, landlord_id]
         );
 
         const user = result.rows[0];

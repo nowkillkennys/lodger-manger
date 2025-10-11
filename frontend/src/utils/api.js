@@ -1,9 +1,25 @@
 /**
  * API Utility Functions
  * File: src/utils/api.js
+ * Enhanced with authentication management and token refresh
  */
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3003';
+
+// Force correct API URL for development
+const FORCE_API_URL = 'http://localhost:3003';
+
+// Use forced URL if environment variable is default
+const FINAL_API_URL = API_URL.includes('3001') ? FORCE_API_URL : API_URL;
+
+// Log API URL for debugging
+console.log('🔗 API Configuration:', {
+    REACT_APP_API_URL: process.env.REACT_APP_API_URL,
+    DEFAULT_API_URL: API_URL,
+    FORCE_API_URL: FORCE_API_URL,
+    FINAL_API_URL: FINAL_API_URL,
+    BACKEND_PORT: 3003
+});
 
 /**
  * Get authorization headers
@@ -16,35 +32,138 @@ const getAuthHeaders = (token) => {
 };
 
 /**
- * Handle API response
+ * Check if token is expired
+ */
+const isTokenExpired = (token) => {
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        const currentTime = Date.now() / 1000;
+        return payload.exp < currentTime;
+    } catch (error) {
+        return true; // Invalid token format
+    }
+};
+
+/**
+ * Get stored authentication data
+ */
+const getStoredAuth = () => {
+    try {
+        const token = localStorage.getItem('token');
+        const user = localStorage.getItem('user');
+
+        if (!token || !user) {
+            return null;
+        }
+
+        // Check if token is expired
+        if (isTokenExpired(token)) {
+            console.warn('Token expired, clearing stored auth');
+            clearStoredAuth();
+            return null;
+        }
+
+        return {
+            token,
+            user: JSON.parse(user)
+        };
+    } catch (error) {
+        console.error('Error getting stored auth:', error);
+        clearStoredAuth();
+        return null;
+    }
+};
+
+/**
+ * Store authentication data
+ */
+const setStoredAuth = (token, user) => {
+    try {
+        localStorage.setItem('token', token);
+        localStorage.setItem('user', JSON.stringify(user));
+    } catch (error) {
+        console.error('Error storing auth:', error);
+    }
+};
+
+/**
+ * Clear stored authentication data
+ */
+const clearStoredAuth = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+};
+
+/**
+ * Handle API response with authentication error handling
  */
 const handleResponse = async (response) => {
     const data = await response.json();
-    
+
     if (!response.ok) {
+        // Handle authentication errors
+        if (response.status === 401) {
+            console.warn('Authentication failed (401), clearing stored auth');
+            clearStoredAuth();
+
+            // Trigger login redirect if available
+            if (window.location.pathname !== '/login') {
+                window.location.href = '/login';
+            }
+
+            throw new Error('Authentication required. Please log in again.');
+        }
+
+        if (response.status === 403) {
+            console.warn('Access forbidden (403):', data.error);
+
+            // Check if it's a token issue
+            const auth = getStoredAuth();
+            if (auth && isTokenExpired(auth.token)) {
+                clearStoredAuth();
+                if (window.location.pathname !== '/login') {
+                    window.location.href = '/login';
+                }
+                throw new Error('Session expired. Please log in again.');
+            }
+
+            throw new Error(data.error || 'Access denied. Insufficient permissions.');
+        }
+
         throw new Error(data.error || 'An error occurred');
     }
-    
+
     return data;
 };
 
 /**
- * Generic API request function
+ * Generic API request function with automatic authentication
  */
 const apiRequest = async (endpoint, options = {}, token = null) => {
+    // Use provided token or get from storage
+    const authToken = token || (getStoredAuth()?.token);
+
     const config = {
         ...options,
         headers: {
             ...options.headers,
-            ...(token ? getAuthHeaders(token) : {}),
+            ...(authToken ? getAuthHeaders(authToken) : {}),
         },
     };
 
     try {
-        const response = await fetch(`${API_URL}${endpoint}`, config);
+        const response = await fetch(`${FINAL_API_URL}${endpoint}`, config);
         return await handleResponse(response);
     } catch (error) {
         console.error('API request failed:', error);
+
+        // If authentication error, ensure auth is cleared
+        if (error.message.includes('Authentication required') ||
+            error.message.includes('Session expired') ||
+            error.message.includes('Access denied')) {
+            clearStoredAuth();
+        }
+
         throw error;
     }
 };
@@ -54,15 +173,84 @@ const apiRequest = async (endpoint, options = {}, token = null) => {
 // ============================================
 
 export const login = async (email, password) => {
-    return apiRequest('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-        headers: { 'Content-Type': 'application/json' },
-    });
+    try {
+        const response = await fetch(`${FINAL_API_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+        });
+
+        const data = await handleResponse(response);
+
+        // Store authentication data
+        if (data.token && data.user) {
+            setStoredAuth(data.token, data.user);
+        }
+
+        return data;
+    } catch (error) {
+        console.error('Login failed:', error);
+        throw error;
+    }
+};
+
+export const logout = () => {
+    clearStoredAuth();
+    window.location.href = '/login';
 };
 
 export const getCurrentUser = async (token) => {
     return apiRequest('/api/auth/me', { method: 'GET' }, token);
+};
+
+export const isAuthenticated = () => {
+    const auth = getStoredAuth();
+    return auth && auth.token && !isTokenExpired(auth.token);
+};
+
+export const getCurrentUserRole = () => {
+    const auth = getStoredAuth();
+    return auth?.user?.user_type || null;
+};
+
+export const hasRole = (role) => {
+    const userRole = getCurrentUserRole();
+    return userRole === role;
+};
+
+export const hasAnyRole = (roles) => {
+    const userRole = getCurrentUserRole();
+    return roles.includes(userRole);
+};
+
+export const requireAuth = () => {
+    if (!isAuthenticated()) {
+        logout();
+        return false;
+    }
+    return true;
+};
+
+export const requireRole = (role) => {
+    if (!requireAuth()) return false;
+
+    if (!hasRole(role)) {
+        console.error(`Access denied. Required role: ${role}, Current role: ${getCurrentUserRole()}`);
+        return false;
+    }
+
+    return true;
+};
+
+export const requireAnyRole = (roles) => {
+    if (!requireAuth()) return false;
+
+    if (!hasAnyRole(roles)) {
+        console.error(`Access denied. Required roles: ${roles.join(', ')}, Current role: ${getCurrentUserRole()}`);
+        return false;
+    }
+
+    return true;
 };
 
 // ============================================
@@ -262,7 +450,7 @@ export const markNotificationRead = async (notificationId, token) => {
 // ============================================
 
 export const createBackup = async (token) => {
-    const response = await fetch(`${API_URL}/api/backup`, {
+    const response = await fetch(`${FINAL_API_URL}/api/backup`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -292,15 +480,15 @@ export const getBackups = async (token) => {
 export const restoreBackup = async (file, token) => {
     const formData = new FormData();
     formData.append('backup', file);
-    
-    const response = await fetch(`${API_URL}/api/restore`, {
+
+    const response = await fetch(`${FINAL_API_URL}/api/restore`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
         },
         body: formData,
     });
-    
+
     return await handleResponse(response);
 };
 
@@ -311,15 +499,15 @@ export const restoreBackup = async (file, token) => {
 export const uploadFile = async (file, type, token) => {
     const formData = new FormData();
     formData.append('file', file);
-    
-    const response = await fetch(`${API_URL}/api/upload/${type}`, {
+
+    const response = await fetch(`${FINAL_API_URL}/api/upload/${type}`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
         },
         body: formData,
     });
-    
+
     return await handleResponse(response);
 };
 
@@ -343,7 +531,7 @@ export const updatePaymentDetails = async (detailsId, updates, token) => {
 // ============================================
 
 export const generateAgreementPDF = async (tenancyId, token) => {
-    const response = await fetch(`${API_URL}/api/tenancies/${tenancyId}/generate-agreement`, {
+    const response = await fetch(`${FINAL_API_URL}/api/tenancies/${tenancyId}/generate-agreement`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -367,7 +555,7 @@ export const generateAgreementPDF = async (tenancyId, token) => {
 };
 
 export const downloadAgreementPDF = async (tenancyId, token) => {
-    const response = await fetch(`${API_URL}/api/tenancies/${tenancyId}/download-agreement`, {
+    const response = await fetch(`${FINAL_API_URL}/api/tenancies/${tenancyId}/download-agreement`, {
         method: 'GET',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -390,7 +578,7 @@ export const downloadAgreementPDF = async (tenancyId, token) => {
 };
 
 export const generateNoticePDF = async (noticeId, token) => {
-    const response = await fetch(`${API_URL}/api/notices/${noticeId}/generate-letter`, {
+    const response = await fetch(`${FINAL_API_URL}/api/notices/${noticeId}/generate-letter`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -413,7 +601,7 @@ export const generateNoticePDF = async (noticeId, token) => {
 };
 
 export const previewAgreementPDF = async (tenancyId, token) => {
-    const response = await fetch(`${API_URL}/api/tenancies/${tenancyId}/preview-agreement`, {
+    const response = await fetch(`${FINAL_API_URL}/api/tenancies/${tenancyId}/preview-agreement`, {
         method: 'GET',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -436,7 +624,7 @@ export const previewAgreementPDF = async (tenancyId, token) => {
 };
 
 export const generatePaymentReceiptPDF = async (paymentId, token) => {
-    const response = await fetch(`${API_URL}/api/payments/${paymentId}/generate-receipt`, {
+    const response = await fetch(`${FINAL_API_URL}/api/payments/${paymentId}/generate-receipt`, {
         method: 'POST',
         headers: {
             'Authorization': `Bearer ${token}`,
@@ -521,9 +709,148 @@ export const isUpcoming = (date, days = 7) => {
     return diffDays > 0 && diffDays <= days;
 };
 
+/**
+ * Debug authentication state (useful for troubleshooting)
+ */
+export const debugAuthState = () => {
+    const auth = getStoredAuth();
+    const token = auth?.token;
+    const user = auth?.user;
+
+    console.group('🔐 Authentication Debug Info');
+    console.log('Is authenticated:', isAuthenticated());
+    console.log('Current user:', user);
+    console.log('User role:', getCurrentUserRole());
+    console.log('Token exists:', !!token);
+
+    if (token) {
+        try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            console.log('Token payload:', payload);
+            console.log('Token expires:', new Date(payload.exp * 1000));
+            console.log('Token expired:', isTokenExpired(token));
+        } catch (error) {
+            console.error('Invalid token format:', error);
+        }
+    }
+
+    console.log('API URL:', FINAL_API_URL);
+    console.groupEnd();
+
+    return {
+        isAuthenticated: isAuthenticated(),
+        user,
+        role: getCurrentUserRole(),
+        tokenExists: !!token,
+        tokenExpired: token ? isTokenExpired(token) : true,
+        apiUrl: FINAL_API_URL
+    };
+};
+
+/**
+ * Quick authentication fix - clears expired tokens and redirects to login
+ */
+export const fixAuthIssues = () => {
+    console.log('🔧 Running authentication diagnostics...');
+
+    const debugInfo = debugAuthState();
+
+    if (!debugInfo.tokenExists) {
+        console.log('❌ No token found - redirecting to login');
+        logout();
+        return false;
+    }
+
+    if (debugInfo.tokenExpired) {
+        console.log('⏰ Token expired - clearing and redirecting to login');
+        clearStoredAuth();
+        window.location.href = '/login';
+        return false;
+    }
+
+    if (!debugInfo.isAuthenticated) {
+        console.log('❌ Not properly authenticated - clearing auth data');
+        clearStoredAuth();
+        window.location.href = '/login';
+        return false;
+    }
+
+    if (!debugInfo.role) {
+        console.log('❌ No user role found - clearing auth data');
+        clearStoredAuth();
+        window.location.href = '/login';
+        return false;
+    }
+
+    console.log('✅ Authentication appears valid');
+    console.log('User:', debugInfo.user.email);
+    console.log('Role:', debugInfo.role);
+
+    return true;
+};
+
+/**
+ * Test admin authentication and permissions
+ */
+export const testAdminAuth = async () => {
+    console.log('🧪 Testing admin authentication...');
+
+    try {
+        // First check if we can get the current user
+        const userResponse = await fetch(`${FINAL_API_URL}/api/auth/me`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!userResponse.ok) {
+            if (userResponse.status === 401) {
+                console.log('❌ Authentication failed - token invalid or expired');
+                return false;
+            }
+            if (userResponse.status === 403) {
+                console.log('❌ Access forbidden - insufficient permissions');
+                return false;
+            }
+        }
+
+        const userData = await userResponse.json();
+        console.log('✅ Current user:', userData);
+
+        // Test if we can access admin-only endpoints
+        const usersResponse = await fetch(`${FINAL_API_URL}/api/users`, {
+            headers: {
+                'Authorization': `Bearer ${localStorage.getItem('token')}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (usersResponse.ok) {
+            console.log('✅ Admin permissions confirmed');
+            return true;
+        } else if (usersResponse.status === 403) {
+            console.log('❌ Admin permissions not granted');
+            return false;
+        }
+
+    } catch (error) {
+        console.error('❌ Test failed:', error.message);
+        return false;
+    }
+};
+
 export default {
     login,
+    logout,
     getCurrentUser,
+    isAuthenticated,
+    getCurrentUserRole,
+    hasRole,
+    hasAnyRole,
+    requireAuth,
+    requireRole,
+    requireAnyRole,
     createUser,
     getUsers,
     resetPassword,
@@ -564,4 +891,24 @@ export default {
     daysBetween,
     isPast,
     isUpcoming,
+    debugAuthState,
+    fixAuthIssues,
+    testAdminAuth,
+};
+
+// Also export individual functions for convenience
+export {
+    login,
+    logout,
+    getCurrentUser,
+    isAuthenticated,
+    getCurrentUserRole,
+    hasRole,
+    hasAnyRole,
+    requireAuth,
+    requireRole,
+    requireAnyRole,
+    debugAuthState,
+    fixAuthIssues,
+    testAdminAuth,
 };

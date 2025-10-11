@@ -55,6 +55,23 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [searchFilters, setSearchFilters] = useState({
     search: '', role: '', status: ''
   });
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
+  const [newUserForm, setNewUserForm] = useState({
+    email: '', password: '', full_name: '', phone: '', user_type: 'lodger', landlord_id: '', landlord_email: ''
+  });
+  const [availableLandlords, setAvailableLandlords] = useState([]);
+  const [showClaimLodgerModal, setShowClaimLodgerModal] = useState(false);
+  const [claimStep, setClaimStep] = useState('email'); // 'email' or 'confirm'
+  const [claimLodgerForm, setClaimLodgerForm] = useState({
+    lodger_email: '',
+    assign_to_landlord_id: '', // Keep for backward compatibility
+    assign_to_landlord_email: '' // Admin can assign to specific landlord by email
+  });
+  const [lodgerPreview, setLodgerPreview] = useState(null);
+  const [showUnlinkUsersModal, setShowUnlinkUsersModal] = useState(false); // false, 'email', or 'confirm'
+  const [unlinkForm, setUnlinkForm] = useState({
+    lodger_email: ''
+  });
 
   useEffect(() => {
     fetchAdminData();
@@ -305,6 +322,230 @@ const AdminDashboard = ({ user, onLogout }) => {
     } catch (error) {
       console.error('Toggle user status error:', error);
       showError(error.response?.data?.error || 'Failed to update user status');
+    }
+  };
+
+  const fetchAvailableLandlords = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await axios.get(`${API_URL}/api/users/landlords`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setAvailableLandlords(response.data);
+    } catch (error) {
+      console.error('Fetch landlords error:', error);
+    }
+  };
+
+  const handleAddUser = async () => {
+    if (!newUserForm.email || !newUserForm.password || !newUserForm.full_name) {
+      showError('Please fill in all required fields');
+      return;
+    }
+
+    if (newUserForm.password.length < 6) {
+      showError('Password must be at least 6 characters long');
+      return;
+    }
+
+    // If creating a lodger, landlord_email is required
+    if (newUserForm.user_type === 'lodger' && !newUserForm.landlord_email) {
+      showError('Please enter a landlord email address for the lodger');
+      return;
+    }
+
+    // Validate landlord email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (newUserForm.user_type === 'lodger' && !emailRegex.test(newUserForm.landlord_email)) {
+      showError('Please enter a valid landlord email address');
+      return;
+    }
+
+    try {
+       const token = localStorage.getItem('token');
+
+       // Prepare the data to send - use landlord_email instead of landlord_id
+       const { landlord_id, ...formData } = newUserForm;
+       const submitData = {
+         ...formData,
+         landlord_email: newUserForm.user_type === 'lodger' ? newUserForm.landlord_email : undefined
+       };
+
+       await axios.post(`${API_URL}/api/auth/register`, submitData, {
+         headers: { Authorization: `Bearer ${token}` }
+       });
+
+       showSuccess('User created successfully');
+       setShowAddUserModal(false);
+       setNewUserForm({ email: '', password: '', full_name: '', phone: '', user_type: 'lodger', landlord_id: '', landlord_email: '' });
+       fetchAdminData(); // Refresh data
+     } catch (error) {
+       console.error('Add user error:', error);
+       showError(error.response?.data?.error || 'Failed to create user');
+     }
+  };
+
+  const handleClaimLodgerEmailSubmit = async (e) => {
+    e.preventDefault();
+    if (!claimLodgerForm.lodger_email) {
+      showError('Please enter lodger email address');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(claimLodgerForm.lodger_email)) {
+      showError('Please enter a valid email address');
+      return;
+    }
+
+    try {
+      // First, try to find the lodger by email to show preview
+      const token = localStorage.getItem('token');
+      const lodgerResult = await axios.get(`${API_URL}/api/users/lodgers?email=${encodeURIComponent(claimLodgerForm.lodger_email)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const lodgers = lodgerResult.data.filter(u => u.user_type === 'lodger');
+      const foundLodger = lodgers.find(l => l.email.toLowerCase() === claimLodgerForm.lodger_email.toLowerCase());
+
+      if (foundLodger) {
+        if (foundLodger.landlord_id) {
+          showError('This lodger is already linked to a landlord');
+          return;
+        }
+        // Show confirmation step with lodger details
+        setLodgerPreview(foundLodger);
+        setClaimStep('confirm');
+      } else {
+        showError('Lodger not found with this email address');
+      }
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to find lodger');
+    }
+  };
+
+  const handleClaimLodgerConfirm = async () => {
+    try {
+      const token = localStorage.getItem('token');
+
+      // If admin specified a landlord email assignment, use the claim by ID endpoint
+      if (claimLodgerForm.assign_to_landlord_email) {
+        // Validate landlord email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(claimLodgerForm.assign_to_landlord_email)) {
+          showError('Please enter a valid landlord email address');
+          return;
+        }
+
+        await axios.post(`${API_URL}/api/users/${lodgerPreview.id}/claim`, {
+          landlord_email: claimLodgerForm.assign_to_landlord_email
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      } else {
+        // Use email-based claiming
+        await axios.post(`${API_URL}/api/users/claim-lodger`, {
+          lodger_email: claimLodgerForm.lodger_email
+        }, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+      }
+
+      showSuccess('Lodger successfully linked and assigned!');
+      setShowClaimLodgerModal(false);
+      setClaimStep('email');
+      setClaimLodgerForm({ lodger_email: '', assign_to_landlord_id: '', assign_to_landlord_email: '' });
+      setLodgerPreview(null);
+      fetchAdminData();
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to link lodger');
+    }
+  };
+
+  const handleClaimModalClose = () => {
+    setShowClaimLodgerModal(false);
+    setClaimStep('email');
+    setClaimLodgerForm({ lodger_email: '', assign_to_landlord_id: '', assign_to_landlord_email: '' });
+    setLodgerPreview(null);
+  };
+
+  const handleUnlinkUsersEmailSubmit = async (e) => {
+    e.preventDefault();
+    if (!unlinkForm.lodger_email) {
+      showError('Please enter lodger email address');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(unlinkForm.lodger_email)) {
+      showError('Please enter a valid email address');
+      return;
+    }
+
+    try {
+      // First, try to find the lodger by email to show preview
+      const token = localStorage.getItem('token');
+      const lodgerResult = await axios.get(`${API_URL}/api/users/lodgers?email=${encodeURIComponent(unlinkForm.lodger_email)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const lodgers = lodgerResult.data.filter(u => u.user_type === 'lodger');
+      const foundLodger = lodgers.find(l => l.email.toLowerCase() === unlinkForm.lodger_email.toLowerCase());
+
+      if (foundLodger) {
+        if (!foundLodger.landlord_id) {
+          showError('This lodger is not currently assigned to any landlord');
+          return;
+        }
+        // Show confirmation step with lodger details
+        setUnlinkForm({ ...unlinkForm, lodgerToUnlink: foundLodger });
+        setShowUnlinkUsersModal('confirm');
+      } else {
+        showError('Lodger not found with this email address');
+      }
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to find lodger');
+    }
+  };
+
+  const handleUnlinkUsersConfirm = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${API_URL}/api/users/${unlinkForm.lodgerToUnlink.id}/unlink`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      showSuccess('Lodger successfully unlinked!');
+      setShowUnlinkUsersModal(false);
+      setUnlinkForm({ lodger_email: '' });
+      fetchAdminData();
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to unlink lodger');
+    }
+  };
+
+  const handleUnlinkUsersClose = () => {
+    setShowUnlinkUsersModal(false);
+    setUnlinkForm({ lodger_email: '', lodgerToUnlink: null });
+  };
+
+  const handleUnlinkLodger = async (lodgerId) => {
+    if (!confirm('Are you sure you want to unlink this lodger? They will no longer be associated with their current landlord.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${API_URL}/api/users/${lodgerId}/unlink`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      showSuccess('Lodger successfully unlinked!');
+      fetchAdminData();
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to unlink lodger');
     }
   };
 
@@ -668,10 +909,32 @@ const AdminDashboard = ({ user, onLogout }) => {
                   Manage system users and their accounts
                 </p>
               </div>
-              <button className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition">
-                <Plus className="w-5 h-5" />
-                Add User
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => {
+                    setShowClaimLodgerModal(true);
+                    fetchAvailableLandlords(); // Refresh landlords list when opening modal
+                  }}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
+                >
+                  <UserCheck className="w-5 h-5" />
+                  Link Users
+                </button>
+                <button
+                  onClick={() => setShowUnlinkUsersModal('email')}
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition"
+                >
+                  <UserX className="w-5 h-5" />
+                  Unlink Users
+                </button>
+                <button
+                  onClick={() => setShowAddUserModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition"
+                >
+                  <Plus className="w-5 h-5" />
+                  Add User
+                </button>
+              </div>
             </div>
 
             {/* Search Filters */}
@@ -725,6 +988,9 @@ const AdminDashboard = ({ user, onLogout }) => {
                           Role
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Landlord Link
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Status
                         </th>
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -769,6 +1035,27 @@ const AdminDashboard = ({ user, onLogout }) => {
                             </span>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
+                            {user.user_type === 'lodger' ? (
+                              user.landlord_id ? (
+                                <div className="flex items-center gap-2">
+                                  <UserCheck className="w-4 h-4 text-green-600" />
+                                  <span className="text-sm text-green-700 font-medium">
+                                    Linked to Landlord #{user.landlord_id}
+                                  </span>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <div className="w-4 h-4 rounded-full bg-gray-300"></div>
+                                  <span className="text-sm text-gray-500">
+                                    Unassigned
+                                  </span>
+                                </div>
+                              )
+                            ) : (
+                              <span className="text-sm text-gray-400">-</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
                             <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
                               user.is_active ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                             }`}>
@@ -779,7 +1066,7 @@ const AdminDashboard = ({ user, onLogout }) => {
                             {new Date(user.created_at).toLocaleDateString('en-GB')}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
                               <button
                                 onClick={() => handleEditUser(user)}
                                 className="text-indigo-600 hover:text-indigo-900"
@@ -800,6 +1087,33 @@ const AdminDashboard = ({ user, onLogout }) => {
                               >
                                 {user.is_active ? 'Deactivate' : 'Activate'}
                               </button>
+                              {user.user_type === 'lodger' && !user.landlord_id && (
+                                <button
+                                  onClick={() => {
+                                    setClaimLodgerForm({
+                                      lodger_email: user.email,
+                                      assign_to_landlord_id: ''
+                                    });
+                                    setLodgerPreview(user);
+                                    setClaimStep('confirm');
+                                    setShowClaimLodgerModal(true);
+                                    fetchAvailableLandlords();
+                                  }}
+                                  className="text-green-600 hover:text-green-900 font-medium"
+                                  title="Link this lodger"
+                                >
+                                  Link
+                                </button>
+                              )}
+                              {user.user_type === 'lodger' && user.landlord_id && (
+                                <button
+                                  onClick={() => handleUnlinkLodger(user.id)}
+                                  className="text-red-600 hover:text-red-900 font-medium"
+                                  title="Unlink this lodger from their landlord"
+                                >
+                                  Unlink
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1805,6 +2119,109 @@ const AdminDashboard = ({ user, onLogout }) => {
           </div>
         )}
 
+        {/* Add User Modal */}
+        {showAddUserModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h3 className="text-lg font-semibold mb-4">Add New User</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Full Name *</label>
+                  <input
+                    type="text"
+                    value={newUserForm.full_name}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, full_name: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="Enter full name"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                  <input
+                    type="email"
+                    value={newUserForm.email}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="user@example.com"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+                  <input
+                    type="password"
+                    value={newUserForm.password}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="Min 6 characters"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                  <input
+                    type="text"
+                    value={newUserForm.phone}
+                    onChange={(e) => setNewUserForm({ ...newUserForm, phone: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                    placeholder="Optional"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">User Type *</label>
+                  <select
+                    value={newUserForm.user_type}
+                    onChange={(e) => {
+                      setNewUserForm({ ...newUserForm, user_type: e.target.value, landlord_id: '', landlord_email: '' });
+                      if (e.target.value === 'lodger') {
+                        fetchAvailableLandlords();
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                  >
+                    <option value="lodger">Lodger</option>
+                    <option value="landlord">Landlord</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+
+                {/* Landlord assignment for lodgers */}
+                {newUserForm.user_type === 'lodger' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Landlord Email *</label>
+                    <input
+                      type="email"
+                      value={newUserForm.landlord_email || ''}
+                      onChange={(e) => setNewUserForm({ ...newUserForm, landlord_email: e.target.value, landlord_id: '' })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+                      placeholder="landlord@example.com"
+                      required
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Enter the email address of an existing landlord account
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="flex gap-3 mt-6">
+                <button
+                  onClick={handleAddUser}
+                  className="flex-1 bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition"
+                >
+                  Create User
+                </button>
+                <button
+                  onClick={() => {
+                    setShowAddUserModal(false);
+                    setNewUserForm({ email: '', password: '', full_name: '', phone: '', user_type: 'lodger', landlord_id: '', landlord_email: '' });
+                  }}
+                  className="flex-1 bg-gray-300 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-400 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Announcement Modal */}
         {showAnnouncementModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -1947,9 +2364,341 @@ const AdminDashboard = ({ user, onLogout }) => {
             </div>
           </div>
         )}
-      </div>
-    </div>
-  );
-};
+
+        {/* Claim Existing Lodger Modal */}
+        {showClaimLodgerModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+              <div className="bg-green-600 text-white px-6 py-4 rounded-t-lg">
+                <h2 className="text-xl font-bold">
+                  {claimStep === 'email' ? 'Link Users' : 'Confirm Link'}
+                </h2>
+                <p className="text-sm opacity-90 mt-1">
+                  {claimStep === 'email'
+                    ? 'Enter the lodger\'s email address to link them to a landlord'
+                    : 'Review lodger details before confirming the link'
+                  }
+                </p>
+              </div>
+
+              {claimStep === 'email' ? (
+                /* Email Entry Step */
+                <form onSubmit={handleClaimLodgerEmailSubmit} className="p-6 space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="font-semibold mb-1">Privacy-First Approach</p>
+                        <p className="text-xs">Enter the exact email address of the lodger you want to link. Their information will only be shown after verification.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Lodger Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={claimLodgerForm.lodger_email}
+                      onChange={(e) => setClaimLodgerForm({...claimLodgerForm, lodger_email: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      placeholder="lodger@example.com"
+                      autoFocus
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Must be the exact email address of an existing lodger account</p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Landlord Email Address (Optional)
+                    </label>
+                    <input
+                      type="email"
+                      value={claimLodgerForm.assign_to_landlord_email || ''}
+                      onChange={(e) => setClaimLodgerForm({...claimLodgerForm, assign_to_landlord_email: e.target.value, assign_to_landlord_id: ''})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                      placeholder="landlord@example.com"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Optional: Enter landlord email to assign this lodger immediately</p>
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                    <p className="font-semibold mb-1">⚠️ Important Notes:</p>
+                    <ul className="list-disc list-inside text-xs space-y-1">
+                      <li>You can only link lodgers who are not already assigned to another landlord</li>
+                      <li>If assigning to a landlord by email, they must have available tenancy slots (max 2)</li>
+                      <li>The lodger will be notified of the link</li>
+                    </ul>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t">
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                    >
+                      Find Lodger
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleClaimModalClose}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* Confirmation Step */
+                <div className="p-6 space-y-4">
+                  <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">
+                        ✓
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-green-900">Lodger Found!</h3>
+                        <p className="text-sm text-green-700 mt-1">Review the details below before confirming the link</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {lodgerPreview && (
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                      <div>
+                        <p className="text-sm text-gray-600">Full Name</p>
+                        <p className="font-semibold text-lg">{lodgerPreview.full_name}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Email</p>
+                        <p className="font-medium">{lodgerPreview.email}</p>
+                      </div>
+                      {lodgerPreview.phone && (
+                        <div>
+                          <p className="text-sm text-gray-600">Phone</p>
+                          <p className="font-medium">{lodgerPreview.phone}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm text-gray-600">Account Status</p>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                          lodgerPreview.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {lodgerPreview.is_active ? 'Active' : 'Inactive'}
+                        </span>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Created</p>
+                        <p className="font-medium">{new Date(lodgerPreview.created_at).toLocaleDateString('en-GB')}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  {claimLodgerForm.assign_to_landlord_email && (
+                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                      <p className="text-sm font-semibold text-blue-900 mb-2">Assignment Details:</p>
+                      <p className="text-sm text-blue-800">
+                        This lodger will be immediately assigned to landlord:{' '}
+                        <strong>
+                          {claimLodgerForm.assign_to_landlord_email}
+                        </strong>
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                    <p className="flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                      <strong>What happens next:</strong>
+                    </p>
+                    <ul className="list-disc list-inside text-xs mt-2 space-y-1">
+                      <li>The lodger will be {claimLodgerForm.assign_to_landlord_email ? 'assigned to the specified landlord' : 'linked but remain unassigned'}</li>
+                      <li>You'll be able to manage this lodger from the admin panel</li>
+                      <li>The lodger will receive a notification about the link</li>
+                      <li>If assigned to a landlord, they can create tenancies for this lodger</li>
+                    </ul>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t">
+                    <button
+                      onClick={handleClaimLodgerConfirm}
+                      className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                    >
+                      Confirm Link
+                    </button>
+                    <button
+                      onClick={() => {
+                        setClaimStep('email');
+                        setLodgerPreview(null);
+                        setClaimLodgerForm({ ...claimLodgerForm, assign_to_landlord_email: '' });
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                    >
+                      Back
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Unlink Users Modal */}
+        {showUnlinkUsersModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+              <div className="bg-red-600 text-white px-6 py-4 rounded-t-lg">
+                <h2 className="text-xl font-bold">
+                  {showUnlinkUsersModal === 'email' ? 'Unlink Users' : 'Confirm Unlink'}
+                </h2>
+                <p className="text-sm opacity-90 mt-1">
+                  {showUnlinkUsersModal === 'email'
+                    ? 'Enter the lodger\'s email address to unlink them from their landlord'
+                    : 'Review lodger details before confirming the unlink'
+                  }
+                </p>
+              </div>
+
+              {showUnlinkUsersModal === 'email' ? (
+                /* Email Entry Step */
+                <form onSubmit={handleUnlinkUsersEmailSubmit} className="p-6 space-y-4">
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                    <div className="flex items-start gap-2">
+                      <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="font-semibold mb-1">Privacy-First Approach</p>
+                        <p className="text-xs">Enter the exact email address of the lodger you want to unlink. Their information will only be shown after verification.</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Lodger Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={unlinkForm.lodger_email}
+                      onChange={(e) => setUnlinkForm({...unlinkForm, lodger_email: e.target.value})}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500"
+                      placeholder="lodger@example.com"
+                      autoFocus
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Must be the exact email address of an existing lodger account</p>
+                  </div>
+
+                  <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                    <p className="font-semibold mb-1">⚠️ Important Notes:</p>
+                    <ul className="list-disc list-inside text-xs space-y-1">
+                      <li>You can only unlink lodgers who are currently assigned to a landlord</li>
+                      <li>Unlinking will remove the landlord-lodger association</li>
+                      <li>The lodger will be notified of the change</li>
+                      <li>Active tenancies may be affected - use with caution</li>
+                    </ul>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t">
+                    <button
+                      type="submit"
+                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold"
+                    >
+                      Find Lodger
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleUnlinkUsersClose}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                /* Confirmation Step */
+                <div className="p-6 space-y-4">
+                  <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 bg-red-500 rounded-full flex items-center justify-center text-white font-bold">
+                        ⚠️
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-red-900">Confirm Unlink</h3>
+                        <p className="text-sm text-red-700 mt-1">Review the details below before confirming the unlink</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {unlinkForm.lodgerToUnlink && (
+                    <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                      <div>
+                        <p className="text-sm text-gray-600">Lodger Name</p>
+                        <p className="font-semibold text-lg">{unlinkForm.lodgerToUnlink.full_name}</p>
+                      </div>
+                      <div>
+                        <p className="text-sm text-gray-600">Email</p>
+                        <p className="font-medium">{unlinkForm.lodgerToUnlink.email}</p>
+                      </div>
+                      {unlinkForm.lodgerToUnlink.phone && (
+                        <div>
+                          <p className="text-sm text-gray-600">Phone</p>
+                          <p className="font-medium">{unlinkForm.lodgerToUnlink.phone}</p>
+                        </div>
+                      )}
+                      <div>
+                        <p className="text-sm text-gray-600">Currently Assigned To</p>
+                        <p className="font-medium text-red-600">Landlord ID: {unlinkForm.lodgerToUnlink.landlord_id}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="bg-orange-50 border border-orange-200 rounded-lg p-4 text-sm text-orange-800">
+                    <p className="flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                      </svg>
+                      <strong>Warning - This Action:</strong>
+                    </p>
+                    <ul className="list-disc list-inside text-xs mt-2 space-y-1">
+                      <li>Will permanently remove the landlord-lodger association</li>
+                      <li>May affect active tenancy agreements</li>
+                      <li>Will notify the lodger of the change</li>
+                      <li>Cannot be undone without re-linking the users</li>
+                    </ul>
+                  </div>
+
+                  <div className="flex gap-3 pt-4 border-t">
+                    <button
+                      onClick={handleUnlinkUsersConfirm}
+                      className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition font-semibold"
+                    >
+                      Confirm Unlink
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowUnlinkUsersModal('email');
+                        setUnlinkForm({ ...unlinkForm, lodgerToUnlink: null });
+                      }}
+                      className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                    >
+                      Back
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+       </div>
+     </div>
+   );
+ };
 
 export default AdminDashboard;

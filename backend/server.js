@@ -39,7 +39,17 @@ app.use(cors({
   origin: true,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'sentry-trace',
+    'sentry-sampled',
+    'sentry-trace-id',
+    'sentry-parent-span-id',
+    'sentry-transaction',
+    'baggage'
+  ]
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

@@ -321,6 +321,12 @@ const LandlordDashboard = ({ user, onLogout }) => {
     request_type: 'forgot_password',
     details: ''
   });
+  const [showClaimLodgerModal, setShowClaimLodgerModal] = useState(false);
+  const [claimStep, setClaimStep] = useState('email'); // 'email' or 'confirm'
+  const [claimLodgerForm, setClaimLodgerForm] = useState({
+    lodger_email: ''
+  });
+  const [lodgerPreview, setLodgerPreview] = useState(null);
   console.log('LandlordDashboard all hooks initialized');
 
   useEffect(() => {
@@ -836,6 +842,92 @@ const LandlordDashboard = ({ user, onLogout }) => {
       showSuccess('Lodger information updated successfully!');
     } catch (error) {
       showError(error.response?.data?.error || 'Failed to update lodger');
+    }
+  };
+
+  const handleClaimLodgerEmailSubmit = async (e) => {
+    e.preventDefault();
+    if (!claimLodgerForm.lodger_email) {
+      showError('Please enter lodger email address');
+      return;
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(claimLodgerForm.lodger_email)) {
+      showError('Please enter a valid email address');
+      return;
+    }
+
+    try {
+      // First, try to find the lodger by email to show preview
+      const token = localStorage.getItem('token');
+      const lodgerResult = await axios.get(`${API_URL}/api/users/lodgers?email=${encodeURIComponent(claimLodgerForm.lodger_email)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      const lodgers = lodgerResult.data.filter(u => u.user_type === 'lodger');
+      const foundLodger = lodgers.find(l => l.email.toLowerCase() === claimLodgerForm.lodger_email.toLowerCase());
+
+      if (foundLodger) {
+        if (foundLodger.landlord_id) {
+          showError('This lodger is already assigned to a landlord');
+          return;
+        }
+        // Show confirmation step with lodger details
+        setLodgerPreview(foundLodger);
+        setClaimStep('confirm');
+      } else {
+        showError('Lodger not found with this email address');
+      }
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to find lodger');
+    }
+  };
+
+  const handleClaimLodgerConfirm = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      await axios.post(`${API_URL}/api/users/claim-lodger`, {
+        lodger_email: claimLodgerForm.lodger_email
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      showSuccess('Lodger successfully claimed and assigned to you!');
+      setShowClaimLodgerModal(false);
+      setClaimStep('email');
+      setClaimLodgerForm({ lodger_email: '' });
+      setLodgerPreview(null);
+      fetchDashboardData();
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to claim lodger');
+    }
+  };
+
+  const handleClaimModalClose = () => {
+    setShowClaimLodgerModal(false);
+    setClaimStep('email');
+    setClaimLodgerForm({ lodger_email: '' });
+    setLodgerPreview(null);
+  };
+
+
+  const handleUnlinkLodger = async (lodgerId) => {
+    if (!confirm('Are you sure you want to unlink this lodger? They will no longer be associated with you.')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      await axios.delete(`${API_URL}/api/users/${lodgerId}/unlink`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      showSuccess('Lodger successfully unlinked!');
+      fetchDashboardData();
+    } catch (error) {
+      showError(error.response?.data?.error || 'Failed to unlink lodger');
     }
   };
 
@@ -1464,18 +1556,27 @@ const LandlordDashboard = ({ user, onLogout }) => {
                   Active tenancies: {tenancies.filter(t => t.status === 'active' || t.status === 'draft').length} / 2 (Maximum)
                 </p>
               </div>
-              <button
-                onClick={() => setShowCreateLodger(true)}
-                disabled={tenancies.filter(t => t.status === 'active' || t.status === 'draft').length >= 2}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-lg ${
-                  tenancies.filter(t => t.status === 'active' || t.status === 'draft').length >= 2
-                    ? 'bg-gray-400 cursor-not-allowed'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                }`}
-              >
-                <Plus className="w-5 h-5" />
-                Create Lodger Account
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowClaimLodgerModal(true)}
+                  className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition shadow-lg"
+                >
+                  <Users className="w-5 h-5" />
+                  Claim Existing Lodger
+                </button>
+                <button
+                  onClick={() => setShowCreateLodger(true)}
+                  disabled={tenancies.filter(t => t.status === 'active' || t.status === 'draft').length >= 2}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg transition shadow-lg ${
+                    tenancies.filter(t => t.status === 'active' || t.status === 'draft').length >= 2
+                      ? 'bg-gray-400 cursor-not-allowed'
+                      : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  }`}
+                >
+                  <Plus className="w-5 h-5" />
+                  Create Lodger Account
+                </button>
+              </div>
             </div>
 
             {tenancies.filter(t => t.status === 'active' || t.status === 'draft').length >= 2 && (
@@ -1612,30 +1713,47 @@ const LandlordDashboard = ({ user, onLogout }) => {
                           <td className="px-6 py-4 whitespace-nowrap">{lodger.email}</td>
                           <td className="px-6 py-4 whitespace-nowrap">{lodger.phone || '-'}</td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                              hasActiveTenancy(lodger.id) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
-                            }`}>
-                              {hasActiveTenancy(lodger.id) ? 'Active Tenancy' : 'No Active Tenancy'}
-                            </span>
+                            <div className="flex flex-col gap-1">
+                              <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                                hasActiveTenancy(lodger.id) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'
+                              }`}>
+                                {hasActiveTenancy(lodger.id) ? 'Active Tenancy' : 'No Active Tenancy'}
+                              </span>
+                              {lodger.landlord_id && (
+                                <span className="px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                  Assigned to You
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
                             {new Date(lodger.created_at).toLocaleDateString()}
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
-                            <button
-                              onClick={() => {
-                                setEditLodger({
-                                  id: lodger.id,
-                                  full_name: lodger.full_name,
-                                  email: lodger.email,
-                                  phone: lodger.phone || ''
-                                });
-                                setShowEditLodger(true);
-                              }}
-                              className="text-indigo-600 hover:text-indigo-900 font-medium text-sm"
-                            >
-                              Edit
-                            </button>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => {
+                                  setEditLodger({
+                                    id: lodger.id,
+                                    full_name: lodger.full_name,
+                                    email: lodger.email,
+                                    phone: lodger.phone || ''
+                                  });
+                                  setShowEditLodger(true);
+                                }}
+                                className="text-indigo-600 hover:text-indigo-900 font-medium text-sm"
+                              >
+                                Edit
+                              </button>
+                              {lodger.landlord_id && (
+                                <button
+                                  onClick={() => handleUnlinkLodger(lodger.id)}
+                                  className="text-red-600 hover:text-red-900 font-medium text-sm"
+                                >
+                                  Unlink
+                                </button>
+                              )}
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -2866,6 +2984,162 @@ const LandlordDashboard = ({ user, onLogout }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Enhanced Claim Existing Lodger Modal */}
+      {showClaimLodgerModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
+            <div className="bg-green-600 text-white px-6 py-4 rounded-t-lg">
+              <h2 className="text-xl font-bold">
+                {claimStep === 'email' ? 'Claim Existing Lodger' : 'Confirm Claim'}
+              </h2>
+              <p className="text-sm opacity-90 mt-1">
+                {claimStep === 'email'
+                  ? 'Enter the lodger\'s email address to claim them'
+                  : 'Review lodger details before confirming'
+                }
+              </p>
+            </div>
+
+            {claimStep === 'email' ? (
+              /* Email Entry Step */
+              <form onSubmit={handleClaimLodgerEmailSubmit} className="p-6 space-y-4">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                  <div className="flex items-start gap-2">
+                    <svg className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <p className="font-semibold mb-1">Privacy-First Approach</p>
+                      <p className="text-xs">Enter the exact email address of the lodger you want to claim. Their information will only be shown after verification.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Lodger Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={claimLodgerForm.lodger_email}
+                    onChange={(e) => setClaimLodgerForm({...claimLodgerForm, lodger_email: e.target.value})}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
+                    placeholder="lodger@example.com"
+                    autoFocus
+                  />
+                  <p className="text-xs text-gray-500 mt-1">Must be the exact email address of an existing lodger account</p>
+                </div>
+
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+                  <p className="font-semibold mb-1">⚠️ Important Notes:</p>
+                  <ul className="list-disc list-inside text-xs space-y-1">
+                    <li>You can only claim lodgers who are not already assigned to another landlord</li>
+                    <li>You must have available tenancy slots (maximum 2 active tenancies)</li>
+                    <li>The lodger will be notified of the claim</li>
+                  </ul>
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t">
+                  <button
+                    type="submit"
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                  >
+                    Find Lodger
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleClaimModalClose}
+                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              /* Confirmation Step */
+              <div className="p-6 space-y-4">
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-10 h-10 bg-green-500 rounded-full flex items-center justify-center text-white font-bold">
+                      ✓
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-green-900">Lodger Found!</h3>
+                      <p className="text-sm text-green-700 mt-1">Review the details below before confirming the claim</p>
+                    </div>
+                  </div>
+                </div>
+
+                {lodgerPreview && (
+                  <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                    <div>
+                      <p className="text-sm text-gray-600">Full Name</p>
+                      <p className="font-semibold text-lg">{lodgerPreview.full_name}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Email</p>
+                      <p className="font-medium">{lodgerPreview.email}</p>
+                    </div>
+                    {lodgerPreview.phone && (
+                      <div>
+                        <p className="text-sm text-gray-600">Phone</p>
+                        <p className="font-medium">{lodgerPreview.phone}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm text-gray-600">Account Status</p>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        lodgerPreview.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {lodgerPreview.is_active ? 'Active' : 'Inactive'}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Created</p>
+                      <p className="font-medium">{new Date(lodgerPreview.created_at).toLocaleDateString('en-GB')}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm text-blue-800">
+                  <p className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <strong>What happens next:</strong>
+                  </p>
+                  <ul className="list-disc list-inside text-xs mt-2 space-y-1">
+                    <li>The lodger will be assigned to your landlord account</li>
+                    <li>You'll be able to create tenancies for this lodger</li>
+                    <li>The lodger will receive a notification about the claim</li>
+                    <li>You can create up to 2 tenancies with this lodger</li>
+                  </ul>
+                </div>
+
+                <div className="flex gap-3 pt-4 border-t">
+                  <button
+                    onClick={handleClaimLodgerConfirm}
+                    className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition font-semibold"
+                  >
+                    Confirm Claim
+                  </button>
+                  <button
+                    onClick={() => {
+                      setClaimStep('email');
+                      setLodgerPreview(null);
+                    }}
+                    className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 transition"
+                  >
+                    Back
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
