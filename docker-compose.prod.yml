@@ -23,7 +23,7 @@ services:
       - lodger_network
 
   backend:
-    image: nowkillkennys/lodger-manager-backend:latest
+    image: ghcr.io/nowkillkennys/lodger-manger-backend:latest
     container_name: lodger_backend
     environment:
       NODE_ENV: production
@@ -55,7 +55,7 @@ services:
       - lodger_network
 
   frontend:
-    image: nowkillkennys/lodger-manager-frontend:latest
+    image: ghcr.io/nowkillkennys/lodger-manger-frontend:latest
     container_name: lodger_frontend
     environment:
       REACT_APP_API_URL: "/api"

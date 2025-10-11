@@ -1,9 +1,15 @@
 #!/bin/bash
 
-# Lodger Management System - Docker Hub Deployment Script
-# This script builds and pushes Docker images to Docker Hub
+# Lodger Management System - GitHub Container Registry Deployment Script
+# This script builds and pushes Docker images to GitHub Container Registry
 
 set -e  # Exit on error
+
+# Load deployment configuration if it exists
+if [ -f "deploy.env" ]; then
+    echo "📋 Loading deployment configuration from deploy.env"
+    source deploy.env
+fi
 
 echo "🐳 Lodger Management System - Docker Hub Deployment"
 echo "=================================================="
@@ -17,8 +23,9 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-BACKEND_IMAGE="nowkillkennys/lodger-manager-backend"
-FRONTEND_IMAGE="nowkillkennys/lodger-manager-frontend"
+GIT_REPO=$(git remote get-url origin | sed -n 's/.*github.com\/\([^\/]*\)\/\([^\/]*\)\.git/\1\/\2/p')
+BACKEND_IMAGE="ghcr.io/${GIT_REPO}-backend"
+FRONTEND_IMAGE="ghcr.io/${GIT_REPO}-frontend"
 VERSION="v1.1.0"
 LATEST="latest"
 AMD64="amd64"
@@ -40,15 +47,28 @@ fi
 
 echo -e "${GREEN}✅ Docker is installed${NC}"
 
-# Check if logged into Docker Hub
-if ! docker info 2>/dev/null | grep -q "Username"; then
-    echo -e "${YELLOW}⚠️  Not logged into Docker Hub${NC}"
-    echo "Please login first:"
-    echo "  docker login"
-    exit 1
+# Check if logged into GitHub Container Registry
+if ! docker system info | grep -q "ghcr.io"; then
+    if [ -n "$GITHUB_USERNAME" ] && [ -n "$GITHUB_TOKEN" ]; then
+        echo "🔐 Logging into GitHub Container Registry..."
+        echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USERNAME" --password-stdin
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}✅ Logged into GitHub Container Registry${NC}"
+        else
+            echo -e "${RED}❌ Failed to login to GitHub Container Registry${NC}"
+            exit 1
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Not logged into GitHub Container Registry${NC}"
+        echo "Please set GITHUB_USERNAME and GITHUB_TOKEN environment variables and login first:"
+        echo "  export GITHUB_USERNAME='your-github-username'"
+        echo "  export GITHUB_TOKEN='your-token'"
+        echo "  echo \$GITHUB_TOKEN | docker login ghcr.io -u \$GITHUB_USERNAME --password-stdin"
+        exit 1
+    fi
+else
+    echo -e "${GREEN}✅ Logged into GitHub Container Registry${NC}"
 fi
-
-echo -e "${GREEN}✅ Logged into Docker Hub${NC}"
 echo ""
 
 # Build backend image
@@ -85,10 +105,10 @@ echo ""
 # Verify images
 echo -e "${BLUE}🔍 Verifying published images...${NC}"
 echo "Backend images:"
-docker search $BACKEND_IMAGE | head -5
+curl -s "https://ghcr.io/v2/nowkillkennys/lodger-manger-backend/tags/list" | head -5
 echo ""
 echo "Frontend images:"
-docker search $FRONTEND_IMAGE | head -5
+curl -s "https://ghcr.io/v2/nowkillkennys/lodger-manger-frontend/tags/list" | head -5
 echo ""
 
 # Display usage instructions
@@ -109,7 +129,7 @@ echo "   # Use the published images in your cloud platform"
 echo "   # Images: $BACKEND_IMAGE:$VERSION and $FRONTEND_IMAGE:$VERSION"
 echo ""
 echo -e "${BLUE}🔗 Image URLs:${NC}"
-echo "  Backend:  https://hub.docker.com/r/$BACKEND_IMAGE"
-echo "  Frontend: https://hub.docker.com/r/$FRONTEND_IMAGE"
+echo "  Backend:  https://github.com/nowkillkennys/lodger-manger/pkgs/container/lodger-manger-backend"
+echo "  Frontend: https://github.com/nowkillkennys/lodger-manger/pkgs/container/lodger-manger-frontend"
 echo ""
 echo -e "${GREEN}Happy deploying! 🚀${NC}"
